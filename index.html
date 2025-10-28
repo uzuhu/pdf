@@ -475,6 +475,82 @@
             margin-top: 5px;
         }
         
+        /* 新增样式 */
+        .mobile-file-input {
+            display: none;
+        }
+        
+        .pdf-preview-controls {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            align-items: center;
+        }
+        
+        .page-navigation {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        
+        .page-nav-btn {
+            width: auto;
+            padding: 6px 12px;
+            font-size: 0.8rem;
+        }
+        
+        .current-page {
+            font-weight: bold;
+            color: var(--primary-color);
+        }
+        
+        .preview-mode-selector {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .preview-mode-btn {
+            padding: 6px 12px;
+            font-size: 0.8rem;
+            width: auto;
+            background-color: #e9ecef;
+            color: var(--dark-color);
+        }
+        
+        .preview-mode-btn.active {
+            background-color: var(--primary-color);
+            color: white;
+        }
+        
+        .pdf-single-preview {
+            width: 100%;
+            max-width: 210mm;
+            margin: 0 auto;
+            text-align: center;
+        }
+        
+        .pdf-single-preview img {
+            max-width: 100%;
+            max-height: 400px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            border-radius: var(--border-radius);
+        }
+        
+        .pdf-preview-placeholder {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 200px;
+            color: var(--secondary-color);
+        }
+        
+        .pdf-preview-placeholder i {
+            font-size: 3rem;
+            margin-bottom: 10px;
+            opacity: 0.5;
+        }
+        
         @media (max-width: 768px) {
             .app-container {
                 flex-direction: column;
@@ -499,6 +575,29 @@
             .container {
                 padding: 10px;
             }
+            
+            /* 移动端优化 */
+            .desktop-file-input {
+                display: none;
+            }
+            
+            .mobile-file-input {
+                display: block;
+            }
+            
+            .pdf-preview-controls {
+                flex-direction: column;
+                gap: 10px;
+                align-items: stretch;
+            }
+            
+            .page-navigation {
+                justify-content: center;
+            }
+            
+            .preview-mode-selector {
+                justify-content: center;
+            }
         }
         
         @media (max-width: 480px) {
@@ -521,6 +620,10 @@
             .rotation-indicator {
                 font-size: 8px;
             }
+            
+            .pdf-single-preview img {
+                max-height: 300px;
+            }
         }
     </style>
 </head>
@@ -542,10 +645,17 @@
                 <div class="control-panel">
                     <div class="form-group">
                         <label for="fileInput">选择图片</label>
-                        <div class="file-input-container">
+                        <!-- 桌面端文件输入 -->
+                        <div class="file-input-container desktop-file-input">
                             <div class="file-input-button">点击选择图片或拖拽到这里</div>
                             <input type="file" id="fileInput" multiple accept="image/*">
                         </div>
+                        <!-- 移动端文件输入 -->
+                        <div class="file-input-container mobile-file-input">
+                            <div class="file-input-button">点击选择图片</div>
+                            <input type="file" id="mobileFileInput" multiple accept="image/*" capture="camera">
+                        </div>
+                        <p class="drag-instruction">支持JPG、PNG等常见图片格式</p>
                     </div>
                     
                     <div class="form-group">
@@ -642,9 +752,24 @@
                 </div>
                 
                 <div class="preview-panel">
+                    <div class="pdf-preview-controls">
+                        <div class="page-navigation">
+                            <button id="prevPageBtn" class="page-nav-btn hidden">上一页</button>
+                            <span id="currentPageDisplay" class="current-page hidden">第 1 页 / 共 0 页</span>
+                            <button id="nextPageBtn" class="page-nav-btn hidden">下一页</button>
+                        </div>
+                        <div class="preview-mode-selector">
+                            <button id="singlePreviewBtn" class="preview-mode-btn active">单页预览</button>
+                            <button id="gridPreviewBtn" class="preview-mode-btn">网格预览</button>
+                        </div>
+                    </div>
+                    
                     <h2>预览</h2>
                     <div class="preview-container" id="pdfPreviewContainer">
-                        <p id="pdfEmptyMessage">上传PDF文件后，预览将显示在这里</p>
+                        <div class="pdf-preview-placeholder" id="pdfEmptyMessage">
+                            <div>📄</div>
+                            <p>上传PDF文件后，预览将显示在这里</p>
+                        </div>
                     </div>
                     <div class="download-buttons">
                         <button id="downloadAllBtn" class="download-all-btn hidden">下载所有图片</button>
@@ -664,10 +789,13 @@
         let uploadedImages = [];
         let pdfImages = [];
         let pdfDoc = null;
+        let currentPdfPage = 1;
+        let previewMode = 'single'; // 'single' 或 'grid'
         const { jsPDF } = window.jspdf;
         
         // DOM元素 - 图片转PDF
         const fileInput = document.getElementById('fileInput');
+        const mobileFileInput = document.getElementById('mobileFileInput');
         const orientationSelect = document.getElementById('orientation');
         const imagesPerPageSelect = document.getElementById('imagesPerPage');
         const spacingSlider = document.getElementById('spacing');
@@ -696,6 +824,13 @@
         const downloadAllBtn = document.getElementById('downloadAllBtn');
         const downloadZipBtn = document.getElementById('downloadZipBtn');
         
+        // 新增PDF预览控制元素
+        const prevPageBtn = document.getElementById('prevPageBtn');
+        const nextPageBtn = document.getElementById('nextPageBtn');
+        const currentPageDisplay = document.getElementById('currentPageDisplay');
+        const singlePreviewBtn = document.getElementById('singlePreviewBtn');
+        const gridPreviewBtn = document.getElementById('gridPreviewBtn');
+        
         // 标签页切换
         document.querySelectorAll('.nav-tab').forEach(tab => {
             tab.addEventListener('click', function(e) {
@@ -721,6 +856,7 @@
         function initImageToPdf() {
             // 事件监听器
             fileInput.addEventListener('change', handleFileSelect);
+            mobileFileInput.addEventListener('change', handleFileSelect);
             orientationSelect.addEventListener('change', updatePreview);
             imagesPerPageSelect.addEventListener('change', updatePreview);
             spacingSlider.addEventListener('input', updateSpacingValue);
@@ -761,13 +897,19 @@
             downloadAllBtn.addEventListener('click', downloadAllImages);
             downloadZipBtn.addEventListener('click', downloadZipFile);
             
+            // 新增PDF预览控制事件
+            prevPageBtn.addEventListener('click', showPrevPage);
+            nextPageBtn.addEventListener('click', showNextPage);
+            singlePreviewBtn.addEventListener('click', () => switchPreviewMode('single'));
+            gridPreviewBtn.addEventListener('click', () => switchPreviewMode('grid'));
+            
             // 更新图片质量显示值
             updateImageQualityValue();
         }
         
         // 图片转PDF功能
         function handleFileSelect() {
-            const files = fileInput.files;
+            const files = fileInput.files.length > 0 ? fileInput.files : mobileFileInput.files;
             if (files.length === 0) return;
             
             // 如果之前没有图片，现在显示清空按钮
@@ -804,6 +946,9 @@
                 reader.readAsDataURL(file);
             });
         }
+        
+        // 其余函数保持不变，与之前的代码相同
+        // ... (rotateImage, moveImage, removeImage, clearAllImages, updateSpacingValue, updatePreview, createRotatedImageData, generatePDF)
         
         function rotateImage(index, degrees) {
             uploadedImages[index].rotation += degrees;
@@ -856,6 +1001,7 @@
             emptyMessage.classList.remove('hidden');
             clearBtn.classList.add('hidden');
             fileInput.value = '';
+            mobileFileInput.value = '';
             showStatus('所有图片已清空', 'success');
         }
         
@@ -1213,6 +1359,9 @@
             pdfEmptyMessage.classList.remove('hidden');
             downloadAllBtn.classList.add('hidden');
             downloadZipBtn.classList.add('hidden');
+            prevPageBtn.classList.add('hidden');
+            nextPageBtn.classList.add('hidden');
+            currentPageDisplay.classList.add('hidden');
             
             const reader = new FileReader();
             reader.onload = function(e) {
@@ -1226,12 +1375,179 @@
                     pdfDoc = pdf;
                     pdfPageCount.textContent = `共 ${pdf.numPages} 页`;
                     showPdfStatus('PDF文件加载成功', 'success');
+                    
+                    // 自动预览第一页
+                    currentPdfPage = 1;
+                    previewSinglePage(1);
+                    updatePageNavigation();
+                    
                 }).catch(function(error) {
                     console.error('加载PDF时出错:', error);
                     showPdfStatus('加载PDF文件失败，请检查文件格式', 'error');
                 });
             };
             reader.readAsArrayBuffer(file);
+        }
+        
+        // 预览单页PDF
+        function previewSinglePage(pageNumber) {
+            if (!pdfDoc || pageNumber < 1 || pageNumber > pdfDoc.numPages) return;
+            
+            pdfPreviewContainer.innerHTML = '';
+            pdfEmptyMessage.classList.add('hidden');
+            
+            pdfDoc.getPage(pageNumber).then(function(page) {
+                const viewport = page.getViewport({ scale: 1.2 });
+                
+                const canvas = document.createElement('canvas');
+                const context = canvas.getContext('2d');
+                canvas.width = viewport.width;
+                canvas.height = viewport.height;
+                
+                const renderContext = {
+                    canvasContext: context,
+                    viewport: viewport
+                };
+                
+                page.render(renderContext).promise.then(function() {
+                    const previewDiv = document.createElement('div');
+                    previewDiv.className = 'pdf-single-preview';
+                    
+                    const img = document.createElement('img');
+                    img.src = canvas.toDataURL('image/png');
+                    img.alt = `PDF第${pageNumber}页`;
+                    
+                    const pageInfo = document.createElement('div');
+                    pageInfo.className = 'page-number';
+                    pageInfo.textContent = `第 ${pageNumber} 页 / 共 ${pdfDoc.numPages} 页`;
+                    pageInfo.style.marginTop = '10px';
+                    
+                    previewDiv.appendChild(img);
+                    previewDiv.appendChild(pageInfo);
+                    pdfPreviewContainer.appendChild(previewDiv);
+                    
+                }).catch(function(error) {
+                    console.error('渲染PDF页面时出错:', error);
+                    showPdfStatus('渲染PDF页面失败', 'error');
+                });
+            });
+        }
+        
+        // 显示上一页
+        function showPrevPage() {
+            if (currentPdfPage > 1) {
+                currentPdfPage--;
+                previewSinglePage(currentPdfPage);
+                updatePageNavigation();
+            }
+        }
+        
+        // 显示下一页
+        function showNextPage() {
+            if (pdfDoc && currentPdfPage < pdfDoc.numPages) {
+                currentPdfPage++;
+                previewSinglePage(currentPdfPage);
+                updatePageNavigation();
+            }
+        }
+        
+        // 更新页面导航
+        function updatePageNavigation() {
+            if (pdfDoc) {
+                prevPageBtn.classList.remove('hidden');
+                nextPageBtn.classList.remove('hidden');
+                currentPageDisplay.classList.remove('hidden');
+                currentPageDisplay.textContent = `第 ${currentPdfPage} 页 / 共 ${pdfDoc.numPages} 页`;
+                
+                // 禁用边界按钮
+                prevPageBtn.disabled = currentPdfPage === 1;
+                nextPageBtn.disabled = currentPdfPage === pdfDoc.numPages;
+            }
+        }
+        
+        // 切换预览模式
+        function switchPreviewMode(mode) {
+            previewMode = mode;
+            
+            // 更新按钮状态
+            singlePreviewBtn.classList.toggle('active', mode === 'single');
+            gridPreviewBtn.classList.toggle('active', mode === 'grid');
+            
+            if (mode === 'single') {
+                // 单页预览模式
+                previewSinglePage(currentPdfPage);
+                prevPageBtn.classList.remove('hidden');
+                nextPageBtn.classList.remove('hidden');
+                currentPageDisplay.classList.remove('hidden');
+            } else {
+                // 网格预览模式
+                renderAllPagesGrid();
+                prevPageBtn.classList.add('hidden');
+                nextPageBtn.classList.add('hidden');
+                currentPageDisplay.classList.add('hidden');
+            }
+        }
+        
+        // 渲染所有页面网格
+        function renderAllPagesGrid() {
+            if (!pdfDoc) return;
+            
+            pdfPreviewContainer.innerHTML = '';
+            pdfEmptyMessage.classList.add('hidden');
+            
+            const gridContainer = document.createElement('div');
+            gridContainer.className = 'pdf-preview-container';
+            pdfPreviewContainer.appendChild(gridContainer);
+            
+            // 限制预览页面数量，避免性能问题
+            const maxPreviewPages = 20;
+            const totalPages = Math.min(pdfDoc.numPages, maxPreviewPages);
+            
+            for (let pageNumber = 1; pageNumber <= totalPages; pageNumber++) {
+                (function(pageNum) {
+                    pdfDoc.getPage(pageNum).then(function(page) {
+                        const viewport = page.getViewport({ scale: 0.5 });
+                        
+                        const canvas = document.createElement('canvas');
+                        const context = canvas.getContext('2d');
+                        canvas.width = viewport.width;
+                        canvas.height = viewport.height;
+                        
+                        const renderContext = {
+                            canvasContext: context,
+                            viewport: viewport
+                        };
+                        
+                        return page.render(renderContext).promise.then(function() {
+                            const previewDiv = document.createElement('div');
+                            previewDiv.className = 'pdf-page-preview';
+                            
+                            const img = document.createElement('img');
+                            img.src = canvas.toDataURL('image/png');
+                            img.alt = `PDF第${pageNum}页`;
+                            
+                            const pageNumberDiv = document.createElement('div');
+                            pageNumberDiv.className = 'page-number';
+                            pageNumberDiv.textContent = `第 ${pageNum} 页`;
+                            
+                            previewDiv.appendChild(img);
+                            previewDiv.appendChild(pageNumberDiv);
+                            gridContainer.appendChild(previewDiv);
+                            
+                        });
+                    }).catch(function(error) {
+                        console.error(`渲染第${pageNum}页时出错:`, error);
+                    });
+                })(pageNumber);
+            }
+            
+            if (pdfDoc.numPages > maxPreviewPages) {
+                const warning = document.createElement('div');
+                warning.className = 'status';
+                warning.style.marginTop = '10px';
+                warning.textContent = `提示：仅显示前 ${maxPreviewPages} 页预览，转换时将处理所有页面`;
+                pdfPreviewContainer.appendChild(warning);
+            }
         }
         
         function updateImageQualityValue() {
@@ -1329,22 +1645,6 @@
                             format: format
                         });
                         
-                        // 创建预览
-                        const preview = document.createElement('div');
-                        preview.className = 'pdf-page-preview';
-                        
-                        const img = document.createElement('img');
-                        img.src = imgData;
-                        img.alt = `第 ${pageNumber} 页`;
-                        
-                        const pageNum = document.createElement('div');
-                        pageNum.className = 'page-number';
-                        pageNum.textContent = `第 ${pageNumber} 页`;
-                        
-                        preview.appendChild(img);
-                        preview.appendChild(pageNum);
-                        pdfPreviewContainer.appendChild(preview);
-                        
                         // 更新状态
                         showPdfStatus(`正在转换第 ${i + 1}/${pageRange.length} 页...`, '');
                     } catch (error) {
@@ -1357,6 +1657,9 @@
                     downloadAllBtn.classList.remove('hidden');
                     downloadZipBtn.classList.remove('hidden');
                     showPdfStatus(`成功转换 ${pdfImages.length} 页`, 'success');
+                    
+                    // 切换到网格预览显示所有转换的页面
+                    switchPreviewMode('grid');
                 } else {
                     showPdfStatus('没有成功转换任何页面', 'error');
                 }
@@ -1420,6 +1723,9 @@
             downloadAllBtn.classList.add('hidden');
             downloadZipBtn.classList.add('hidden');
             clearPdfBtn.classList.add('hidden');
+            prevPageBtn.classList.add('hidden');
+            nextPageBtn.classList.add('hidden');
+            currentPageDisplay.classList.add('hidden');
             pdfImages = [];
             pdfDoc = null;
             showPdfStatus('PDF文件已清除', 'success');
