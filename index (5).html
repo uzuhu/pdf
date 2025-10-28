@@ -1,0 +1,942 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PDF转图片 - 高质量质量高清图片转换工具</title>
+  <!-- Tailwind CSS v3 -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Font Awesome -->
+  <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+  <!-- PDF.js -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+  <!-- JSZip for zipping images -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <!-- FileSaver.js for saving files -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+  
+  <!-- Tailwind Config -->
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: '#3b82f6',
+            secondary: '#64748b',
+            accent: '#0ea5e9',
+            light: '#f8fafc',
+            dark: '#1e293b'
+          },
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+          },
+          boxShadow: {
+            'custom': '0 4px 20px rgba(0, 0, 0, 0.08)',
+            'hover': '0 10px 30px rgba(0, 0, 0, 0.12)',
+          }
+        }
+      }
+    }
+  </script>
+  
+  <style type="text/tailwindcss">
+    @layer utilities {
+      .transition-all-300 {
+        transition: all 0.3s ease;
+      }
+      .bg-gradient {
+        background: linear-gradient(135deg, #3b82f6 0%, #0ea5e9 100%);
+      }
+      .text-gradient {
+        background-clip: text;
+        -webkit-background-clip: text;
+        color: transparent;
+        background-image: linear-gradient(135deg, #3b82f6 0%, #0ea5e9 100%);
+      }
+      .border-gradient {
+        border-image: linear-gradient(135deg, #3b82f6 0%, #0ea5e9 100%) 1;
+      }
+    }
+  </style>
+  
+  <style>
+    /* Custom styles */
+    .dropzone {
+      border: 2px dashed #cbd5e1;
+      transition: all 0.3s ease;
+    }
+    
+    .dropzone.active {
+      border-color: #3b82f6;
+      background-color: rgba(59, 130, 246, 0.05);
+    }
+    
+    .progress-bar {
+      height: 8px;
+      background-color: #e2e8f0;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    
+    .progress-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #3b82f6, #0ea5e9);
+      transition: width 0.3s ease;
+    }
+    
+    .canvas-container {
+      position: relative;
+      overflow: hidden;
+      border-radius: 8px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    }
+    
+    .canvas-container canvas {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+    
+    .page-navigation {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 1rem;
+      margin-top: 1rem;
+    }
+    
+    .page-navigation button {
+      padding: 0.5rem 1rem;
+      border-radius: 4px;
+      background-color: #f1f5f9;
+      color: #64748b;
+      transition: all 0.3s ease;
+    }
+    
+    .page-navigation button:hover {
+      background-color: #e2e8f0;
+    }
+    
+    .page-navigation button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    
+    .page-indicator {
+      font-size: 0.875rem;
+      color: #64748b;
+    }
+    
+    /* Animation for loading */
+    @keyframes pulse {
+      0% {
+        opacity: 0.6;
+      }
+      50% {
+        opacity: 1;
+      }
+      100% {
+        opacity: 0.6;
+      }
+    }
+    
+    .animate-pulse {
+      animation: pulse 1.5s infinite;
+    }
+    
+    /* Custom scrollbar */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    
+    ::-webkit-scrollbar-track {
+      background: #f1f5f9;
+    }
+    
+    ::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 4px;
+    }
+    
+    ::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+  </style>
+</head>
+<body class="bg-gray-50 text-gray-800 font-sans min-h-screen">
+  <!-- Header -->
+  <header class="bg-white shadow-sm">
+    <div class="container mx-auto px-4 py-6">
+      <div class="flex items-center items-center justify-between">
+        <div class="flex items-center space-x-3">
+          <img src="https://p26-doubao-search-sign.byteimg.com/tos-cn-i-be4g95zd3a/1011118855933919269~tplv-be4g95zd3a-image.jpeg?rk3s=542c0f93&x-expires=1777169532&x-signature=JqGTOzfzFjARbeQYC7Rpm7y6kx0%3D" alt="PDF转图片" class="w-10 h-10">
+          <h1 class="text-2xl font-bold text-gradient">PDF转图片</h1>
+        </div>
+        <div class="hidden md:flex items-center space-x-6">
+          <a href="#" class="text-gray-600 hover:text-primary transition-all-300">首页</a>
+          <a href="#how-it-works" class="text-gray-600 hover:text-primary transition-all-300">使用方法</a>
+          <a href="#features" class="text-gray-600 hover:text-primary transition-all-300">功能特点</a>
+          <a href="#faq" class="text-gray-600 hover:text-primary transition-all-300">常见问题</a>
+        </div>
+        <button class="md:hidden text-gray-600" id="mobile-menu-button">
+          <i class="fa fa-bars text-xl"></i>
+        </button>
+      </div>
+      <!-- Mobile Menu -->
+      <div class="md:hidden hidden mt-4 pb-2" id="mobile-menu">
+        <a href="#" class="block py-2 text-gray-600 hover:text-primary">首页</a>
+        <a href="#how-it-works" class="block py-2 text-gray-600 hover:text-primary">使用方法</a>
+        <a href="#features" class="block py-2 text-gray-600 hover:text-primary">功能特点</a>
+        <a href="#faq" class="block py-2 text-gray-600 hover:text-primary">常见问题</a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Hero Section -->
+  <section class="py-16 bg-gradient">
+    <div class="container mx-auto px-4 text-center">
+      <h2 class="text-3xl md:text-4xl font-bold text-white mb-6">将PDF文件转换为高质量图片</h2>
+      <p class="text-lg text-blue-100 mb-8 max-w-2xl mx-auto">简单易用的在线工具，支持高清晰度转换，保护您的文件安全，所有处理均在浏览器中完成</p>
+      <div class="flex flex-col sm:flex-row justify-center gap-4">
+        <a href="#converter" class="bg-white text-primary hover:bg-blue-50 px-8 py-3 rounded-lg font-medium transition-all-300 shadow-md hover:shadow-lg">
+          立即转换 <i class="fa fa-arrow-right ml-2"></i>
+        </a>
+        <a href="#how-it-works" class="bg-transparent border-2 border-white text-white hover:bg-white hover:text-primary px-8 py-3 rounded-lg font-medium transition-all-300">
+          了解更多 <i class="fa fa-info-circle ml-2"></i>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Converter Section -->
+  <section id="converter" class="py-16 bg-white">
+    <div class="container mx-auto px-4">
+      <div class="max-w-4xl mx-auto">
+        <h2 class="text-2xl md:text-3xl font-bold text-center mb-12">PDF转图片工具</h2>
+        
+        <div class="bg-gray-50 rounded-xl shadow-custom p-6 md:p-8">
+          <!-- Upload Area -->
+          <div id="upload-area" class="mb-8">
+            <div id="dropzone" class="dropzone rounded-lg p-8 text-center cursor-pointer">
+              <input type="file" id="file-input" class="hidden" accept=".pdf">
+              <img src="https://p26-doubao-search-sign.byteimg.com/tos-cn-i-be4g95zd3a/2085311660023480320~tplv-be4g95zd3a-image.jpeg?rk3s=542c0f93&x-expires=1777169532&x-signature=ynknRZ%2FwolTtSOjLlw5iaH3v8xo%3D" alt="上传文件" class="w-16 h-16 mx-auto mb-4 text-gray-400">
+              <h3 class="text-lg font-medium mb-2">拖放PDF文件到此处</h3>
+              <p class="text-gray-500 mb-4">或</p>
+              <button id="browse-button" class="bg-primary hover:bg-blue-600 text-white px-6 py-2 rounded-lg transition-all-300">
+                浏览文件 <i class="fa fa-file-pdf-o ml-2"></i>
+              </button>
+            </div>
+          </div>
+          
+          <!-- File Info (Hidden by default) -->
+          <div id="file-info" class="mb-8 hidden">
+            <div class="flex items-center justify-between p-4 bg-white rounded-lg shadow-sm">
+              <div class="flex items-center">
+                <i class="fa fa-file-pdf-o text-red-500 text-2xl mr-3"></i>
+                <div>
+                  <p id="file-name" class="font-medium truncate max-w-xs"></p>
+                  <p id="file-size" class="text-sm text-gray-500"></p>
+                </div>
+              </div>
+              <button id="remove-file" class="text-gray-400 hover:text-red-500 transition-all-300">
+                <i class="fa fa-times-circle text-xl"></i>
+              </button>
+            </div>
+          </div>
+          
+          <!-- PDF Preview (Hidden by default) -->
+          <div id="pdf-preview" class="mb-8 hidden">
+            <h3 class="text-lg font-medium mb-4">PDF预览</h3>
+            <div class="canvas-container bg-white">
+              <canvas id="preview-canvas"></canvas>
+            </div>
+            <div class="page-navigation">
+              <button id="prev-page" disabled>
+                <i class="fa fa-chevron-left"></i>
+              </button>
+              <span id="page-indicator" class="page-indicator">第 1 页，共 0 页</span>
+              <button id="next-page" disabled>
+                <i class="fa fa-chevron-right"></i>
+              </button>
+            </div>
+          </div>
+          
+          <!-- Conversion Settings (Hidden by default) -->
+          <div id="conversion-settings" class="mb-8 hidden">
+            <h3 class="text-lg font-medium mb-4">转换设置</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">图片格式</label>
+                <select id="image-format" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary">
+                  <option value="png">PNG</option>
+                  <option value="jpg">JPG</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">分辨率 (DPI)</label>
+                <select id="resolution" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary">
+                  <option value="72">72 DPI (标准)</option>
+                  <option value="150">150 DPI (中等)</option>
+                  <option value="300" selected>300 DPI (高质量)</option>
+                  <option value="600">600 DPI (超高质量)</option>
+                </select>
+              </div>
+              <div class="md:col-span-2">
+                <label class="block text-sm font-medium text-gray-700 mb-2">页面范围</label>
+                <div class="flex flex-col sm:flex-row gap-4">
+                  <div class="flex-1">
+                    <input type="number" id="start-page" min="1" value="1" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary">
+                    <label class="block text-xs text-gray-500 mt-1">起始页</label>
+                  </div>
+                  <div class="flex items-center">
+                    <span class="text-gray-500">至</span>
+                  </div>
+                  <div class="flex-1">
+                    <input type="number" id="end-page" min="1" value="1" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-primary">
+                    <label class="block text-xs text-gray-500 mt-1">结束页</label>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Conversion Progress (Hidden by default) -->
+          <div id="conversion-progress" class="mb-8 hidden">
+            <h3 class="text-lg font-medium mb-4">转换进度</h3>
+            <div class="progress-bar mb-2">
+              <div id="progress-bar-fill" class="progress-bar-fill" style="width: 0%"></div>
+            </div>
+            <p id="progress-text" class="text-sm text-gray-500">准备转换...</p>
+          </div>
+          
+          <!-- Conversion Results (Hidden by default) -->
+          <div id="conversion-results" class="mb-8 hidden">
+            <h3 class="text-lg font-medium mb-4">转换结果</h3>
+            <div id="results-container" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+              <!-- Results will be inserted here -->
+            </div>
+            <div class="mt-6 flex flex-col sm:flex-row gap-4">
+              <button id="download-all" class="bg-primary hover:bg-blue-600 text-white px-6 py-3 rounded-lg transition-all-300 flex items-center justify-center">
+                <i class="fa fa-download mr-2"></i> 下载全部图片
+              </button>
+              <button id="download-zip" class="bg-secondary hover:bg-gray-600 text-white px-6 py-3 rounded-lg transition-all-300 flex items-center justify-center">
+                <i class="fa fa-file-zip-o mr-2"></i> 打包下载 (ZIP)
+              </button>
+            </div>
+          </div>
+          
+          <!-- Action Buttons -->
+          <div id="action-buttons" class="flex justify-center gap-4 hidden">
+            <button id="convert-button" class="bg-primary hover:bg-blue-600 text-white px-8 py-3 rounded-lg font-medium transition-all-300 shadow-md hover:shadow-lg">
+              开始转换 <i class="fa fa-magic ml-2"></i>
+            </button>
+            <button id="reset-button" class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-6 py-3 rounded-lg transition-all-300">
+              重置 <i class="fa fa-refresh ml-2"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- How It Works Section -->
+  <section id="how-it-works" class="py-16 bg-gray-50">
+    <div class="container mx-auto px-4">
+      <h2 class="text-2xl md:text-3xl font-bold text-center mb-12">使用方法</h2>
+      
+      <div class="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-8">
+        <div class="bg-white p-6 rounded-xl shadow-custom text-center">
+          <div class="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <i class="fa fa-upload text-primary text-2xl"></i>
+          </div>
+          <h3 class="text-xl font-medium mb-3">上传PDF文件</h3>
+          <p class="text-gray-600">拖放PDF文件到上传区域，或点击浏览按钮选择文件</p>
+        </div>
+        
+        <div class="bg-white p-6 rounded-xl shadow-custom text-center">
+          <div class="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <i class="fa fa-sliders text-primary text-2xl"></i>
+          </div>
+          <h3 class="text-xl font-medium mb-3">设置转换选项</h3>
+          <p class="text-gray-600">选择图片格式、分辨率和页面范围等转换参数</p>
+        </div>
+        
+        <div class="bg-white p-6 rounded-xl shadow-custom text-center">
+          <div class="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <i class="fa fa-download text-primary text-2xl"></i>
+          </div>
+          <h3 class="text-xl font-medium mb-3">下载图片</h3>
+          <p class="text-gray-600">转换完成后，下载单张图片或打包下载所有图片</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Features Section -->
+  <section id="features" class="py-16 bg-white">
+    <div class="container mx-auto px-4">
+      <h2 class="text-2xl md:text-3xl font-bold text-center mb-12">功能特点</h2>
+      
+      <div class="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-8">
+        <div class="flex items-start">
+          <div class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mr-4 flex-shrink-0">
+            <i class="fa fa-check-circle text-primary text-xl"></i>
+          </div>
+          <div>
+            <h3 class="text-xl font-medium mb-2">高质量转换</h3>
+            <p class="text-gray-600">支持最高600 DPI的分辨率，确保转换后的图片清晰锐利</p>
+          </div>
+        </div>
+        
+        <div class="flex items-start">
+          <div class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mr-4 flex-shrink-0">
+            <i class="fa fa-lock text-primary text-xl"></i>
+          </div>
+          <div>
+            <h3 class="text-xl font-medium mb-2">安全可靠</h3>
+            <p class="text-gray-600">所有文件处理均在浏览器中完成，不会上传到服务器，保护您的隐私</p>
+          </div>
+        </div>
+        
+        <div class="flex items-start">
+          <div class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mr-4 flex-shrink-0">
+            <i class="fa fa-bolt text-primary text-xl"></i>
+          </div>
+          <div>
+            <h3 class="text-xl font-medium mb-2">快速高效</h3>
+            <p class="text-gray-600">使用Web Workers进行后台处理，不阻塞主线程，转换速度快</p>
+          </div>
+        </div>
+        
+        <div class="flex items-start">
+          <div class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mr-4 flex-shrink-0">
+            <i class="fa fa-compress text-primary text-xl"></i>
+          </div>
+          <div>
+            <h3 class="text-xl font-medium mb-2">批量下载</h3>
+            <p class="text-gray-600">支持将多张图片打包成ZIP文件，方便批量下载和分享</p>
+          </div>
+        </div>
+        
+        <div class="flex items-start">
+          <div class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mr-4 flex-shrink-0">
+            <i class="fa fa-desktop text-primary text-xl"></i>
+          </div>
+          <div>
+            <h3 class="text-xl font-medium mb-2">PDF预览</h3>
+            <p class="text-gray-600">上传后可预览PDF内容，方便确认转换前的文件</p>
+          </div>
+        </div>
+        
+        <div class="flex items-start">
+          <div class="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mr-4 flex-shrink-0">
+            <i class="fa fa-mobile text-primary text-xl"></i>
+          </div>
+          <div>
+            <h3 class="text-xl font-medium mb-2">响应式设计</h3>
+            <p class="text-gray-600">适配各种设备屏幕，在电脑、平板和手机上均可使用</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FAQ Section -->
+  <section id="faq" class="py-16 bg-gray-50">
+    <div class="container mx-auto px-4">
+      <h2 class="text-2xl md:text-3xl font-bold text-center mb-12">常见问题</h2>
+      
+      <div class="max-w-3xl mx-auto">
+        <div class="space-y-6">
+          <div class="bg-white p-6 rounded-xl shadow-custom">
+            <button class="faq-toggle flex justify-between items-center w-full text-left">
+              <h3 class="text-lg font-medium">转换后的图片质量如何？</h3>
+              <i class="fa fa-chevron-down text-gray-400 transition-transform"></i>
+            </button>
+            <div class="faq-content hidden mt-4 text-gray-600">
+              <p>我们的工具支持最高600 DPI的分辨率，转换后的图片质量非常高，可以满足大多数专业需求。您可以根据需要选择不同的分辨率设置。</p>
+            </div>
+          </div>
+          
+          <div class="bg-white p-6 rounded-xl shadow-custom">
+            <button class="faq-toggle flex justify-between items-center w-full text-left">
+              <h3 class="text-lg font-medium">我的文件安全吗？会被上传到服务器吗？</h3>
+              <i class="fa fa-chevron-down text-gray-400 transition-transform"></i>
+            </button>
+            <div class="faq-content hidden mt-4 text-gray-600">
+              <p>非常安全。所有文件处理均在您的浏览器中完成，不会上传到任何服务器。转换过程中使用的所有数据都存储在您的设备本地，保护您的隐私和文件安全。</p>
+            </div>
+          </div>
+          
+          <div class="bg-white p-6 rounded-xl shadow-custom">
+            <button class="faq-toggle flex justify-between items-center w-full text-left">
+              <h3 class="text-lg font-medium">支持转换多大的PDF文件？</h3>
+              <i class="fa fa-chevron-down text-gray-400 transition-transform"></i>
+            </button>
+            <div class="faq-content hidden mt-4 text-gray-600">
+              <p>理论上没有文件大小限制，但由于浏览器内存限制，建议转换不超过50MB的PDF文件。对于较大的文件，转换过程可能会比较慢或导致浏览器无响应。</p>
+            </div>
+          </div>
+          
+          <div class="bg-white p-6 rounded-xl shadow-custom">
+            <button class="faq-toggle flex justify-between items-center w-full text-left">
+              <h3 class="text-lg font-medium">可以转换加密的PDF文件吗？</h3>
+              <i class="fa fa-chevron-down text-gray-400 transition-transform"></i>
+            </button>
+            <div class="faq-content hidden mt-4 text-gray-600">
+              <p>目前不支持转换加密或受保护的PDF文件。如果您尝试转换此类文件，工具会提示错误信息。您需要先移除PDF文件的密码保护，然后再进行转换。</p>
+            </div>
+          </div>
+          
+          <div class="bg-white p-6 rounded-xl shadow-custom">
+            <button class="faq-toggle flex justify-between items-center w-full text-left">
+              <h3 class="text-lg font-medium">转换后的图片可以保存为什么格式？</h3>
+              <i class="fa fa-chevron-down text-gray-400 transition-transform"></i>
+            </button>
+            <div class="faq-content hidden mt-4 text-gray-600">
+              <p>目前支持两种常见的图片格式：PNG和JPG。PNG格式支持透明背景，质量更高但文件体积较大；JPG格式文件体积较小，但不支持透明背景且可能有轻微的质量损失。</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="bg-gray-800 text-white py-12">
+    <div class="container mx-auto px-4">
+      <div class="flex flex-col md:flex-row justify-between items-center">
+        <div class="mb-6 md:mb-0">
+          <div class="flex items-center space-x-3">
+            <img src="https://p26-doubao-search-sign.byteimg.com/tos-cn-i-be4g95zd3a/1011118855933919269~tplv-be4g95zd3a-image.jpeg?rk3s=542c0f93&x-expires=1777169532&x-signature=JqGTOzfzFjARbeQYC7Rpm7y6kx0%3D" alt="PDF转图片" class="w-10 h-10">
+            <h2 class="text-xl font-bold">PDF转图片</h2>
+          </div>
+          <p class="text-gray-400 mt-2">简单易用的PDF转图片工具</p>
+        </div>
+        
+        <div class="flex flex-col md:flex-row md:space-x-12 items-center md:items-start">
+          <div class="mb-6 md:mb-0">
+            <h3 class="text-lg font-medium mb-3">快速链接</h3>
+            <ul class="space-y-2">
+              <li><a href="#" class="text-gray-400 hover:text-white transition-all-300">首页</a></li>
+              <li><a href="#how-it-works" class="text-gray-400 hover:text-white transition-all-300">使用方法</a></li>
+              <li><a href="#features" class="text-gray-400 hover:text-white transition-all-300">功能特点</a></li>
+              <li><a href="#faq" class="text-gray-400 hover:text-white transition-all-300">常见问题</a></li>
+            </ul>
+          </div>
+          
+          <div>
+            <h3 class="text-lg font-medium mb-3">联系我们</h3>
+            <ul class="space-y-2">
+              <li class="flex items-center">
+                <i class="fa fa-envelope mr-2 text-gray-400"></i>
+                <a href="mailto:contact@example.com" class="text-gray-400 hover:text-white transition-all-300">contact@example.com</a>
+              </li>
+              <li class="flex items-center">
+                <i class="fa fa-github mr-2 text-gray-400"></i>
+                <a href="https://github.com" target="_blank" class="text-gray-400 hover:text-white transition-all-300">GitHub</a>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+      
+      <div class="border-t border-gray-700 mt-8 pt-8 text-center text-gray-400">
+        <p>&copy; 2025 PDF转图片. 保留所有权利.</p>
+      </div>
+    </div>
+  </footer>
+
+  <!-- JavaScript -->
+  <script>
+    // Global variables
+    let pdfDoc = null;
+    let currentPage = 1;
+    let totalPages = 0;
+    let convertedImages = [];
+    let pdfFile = null;
+    
+    // DOM Elements
+    const dropzone = document.getElementById('dropzone');
+    const fileInput = document.getElementById('file-input');
+    const browseButton = document.getElementById('browse-button');
+    const fileInfo = document.getElementById('file-info');
+    const fileName = document.getElementById('file-name');
+    const fileSize = document.getElementById('file-size');
+    const removeFile = document.getElementById('remove-file');
+    const pdfPreview = document.getElementById('pdf-preview');
+    const previewCanvas = document.getElementById('preview-canvas');
+    const prevPage = document.getElementById('prev-page');
+    const nextPage = document.getElementById('next-page');
+    const pageIndicator = document.getElementById('page-indicator');
+    const conversionSettings = document.getElementById('conversion-settings');
+    const startPage = document.getElementById('start-page');
+    const endPage = document.getElementById('end-page');
+    const imageFormat = document.getElementById('image-format');
+    const resolution = document.getElementById('resolution');
+    const conversionProgress = document.getElementById('conversion-progress');
+    const progressBarFill = document.getElementById('progress-bar-fill');
+    const progressText = document.getElementById('progress-text');
+    const conversionResults = document.getElementById('conversion-results');
+    const resultsContainer = document.getElementById('results-container');
+    const downloadAll = document.getElementById('download-all');
+    const downloadZip = document.getElementById('download-zip');
+    const actionButtons = document.getElementById('action-buttons');
+    const convertButton = document.getElementById('convert-button');
+    const resetButton = document.getElementById('reset-button');
+    const mobileMenuButton = document.getElementById('mobile-menu-button');
+    const mobileMenu = document.getElementById('mobile-menu');
+    const faqToggles = document.querySelectorAll('.faq-toggle');
+    
+    // Initialize PDF.js
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+    
+    // Event Listeners
+    browseButton.addEventListener('click', () => fileInput.click());
+    
+    fileInput.addEventListener('change', handleFileSelect);
+    
+    dropzone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropzone.classList.add('active');
+    });
+    
+    dropzone.addEventListener('dragleave', () => {
+      dropzone.classList.remove('active');
+    });
+    
+    dropzone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropzone.classList.remove('active');
+      
+      if (e.dataTransfer.files.length) {
+        handleFiles(e.dataTransfer.files);
+      }
+    });
+    
+    removeFile.addEventListener('click', resetState);
+    
+    prevPage.addEventListener('click', () => renderPage(currentPage - 1));
+    
+    nextPage.addEventListener('click', () => renderPage(currentPage + 1));
+    
+    convertButton.addEventListener('click', convertPdfToImages);
+    
+    downloadAll.addEventListener('click', downloadAllImages);
+    
+    downloadZip.addEventListener('click', downloadImagesAsZip);
+    
+    resetButton.addEventListener('click', resetState);
+    
+    mobileMenuButton.addEventListener('click', () => {
+      mobileMenu.classList.toggle('hidden');
+    });
+    
+    faqToggles.forEach(toggle => {
+      toggle.addEventListener('click', () => {
+        const content = toggle.nextElementSibling;
+        const icon = toggle.querySelector('i');
+        
+        content.classList.toggle('hidden');
+        icon.classList.toggle('rotate-180');
+      });
+    });
+    
+    // Functions
+    function handleFileSelect(e) {
+      if (e.target.files.length) {
+        handleFiles(e.target.files);
+      }
+    }
+    
+    function handleFiles(files) {
+      const file = files[0];
+      
+      if (file.type !== 'application/pdf') {
+        alert('请选择PDF文件');
+        return;
+      }
+      
+      pdfFile = file;
+      fileName.textContent = file.name;
+      fileSize.textContent = formatFileSize(file.size);
+      
+      // Show file info and action buttons
+      fileInfo.classList.remove('hidden');
+      actionButtons.classList.remove('hidden');
+      
+      // Load and preview PDF
+      loadPdf(file);
+    }
+    
+    function loadPdf(file) {
+      const fileReader = new FileReader();
+      
+      fileReader.onload = function() {
+        const typedArray = new Uint8Array(this.result);
+        
+        pdfjsLib.getDocument(typedArray).promise.then(function(pdf) {
+          pdfDoc = pdf;
+          totalPages = pdf.numPages;
+          
+          // Update page indicator
+          pageIndicator.textContent = `第 ${currentPage} 页，共 ${totalPages} 页`;
+          
+          // Enable/disable navigation buttons
+          prevPage.disabled = currentPage <= 1;
+          nextPage.disabled = currentPage >= totalPages;
+          
+          // Set page range inputs
+          startPage.value = 1;
+          endPage.value = totalPages;
+          startPage.max = totalPages;
+          endPage.max = totalPages;
+          
+          // Show preview and settings
+          pdfPreview.classList.remove('hidden');
+          conversionSettings.classList.remove('hidden');
+          
+          // Render first page
+          renderPage(currentPage);
+        }).catch(function(error) {
+          console.error('加载PDF失败:', error);
+          alert('加载PDF失败，请尝试其他文件');
+        });
+      };
+      
+      fileReader.readAsArrayBuffer(file);
+    }
+    
+    function renderPage(pageNum) {
+      if (!pdfDoc) return;
+      
+      pdfDoc.getPage(pageNum).then(function(page) {
+        const viewport = page.getViewport({ scale: 1.5 });
+        
+        // Set canvas dimensions
+        previewCanvas.width = viewport.width;
+        previewCanvas.height = viewport.height;
+        
+        const ctx = previewCanvas.getContext('2d');
+        const renderContext = {
+          canvasContext: ctx,
+          viewport: viewport
+        };
+        
+        const renderTask = page.render(renderContext);
+        
+        renderTask.promise.then(function() {
+          currentPage = pageNum;
+          pageIndicator.textContent = `第 ${currentPage} 页，共 ${totalPages} 页`;
+          
+          // Enable/disable navigation buttons
+          prevPage.disabled = currentPage <= 1;
+          nextPage.disabled = currentPage >= totalPages;
+        });
+      });
+    }
+    
+    async function convertPdfToImages() {
+      if (!pdfDoc) return;
+      
+      const start = parseInt(startPage.value);
+      const end = parseInt(endPage.value);
+      const format = imageFormat.value;
+      const dpi = parseInt(resolution.value);
+      
+      // Validate page range
+      if (start < 1 || end > totalPages || start > end) {
+        alert('请输入有效的页面范围');
+        return;
+      }
+      
+      // Show progress
+      conversionProgress.classList.remove('hidden');
+      conversionResults.classList.add('hidden');
+      
+      // Disable convert button
+      convertButton.disabled = true;
+      convertButton.textContent = '转换中...';
+      
+      // Clear previous results
+      convertedImages = [];
+      
+      // Calculate scale based on DPI (assuming 72 DPI is standard)
+      const scale = dpi / 72;
+      
+      try {
+        for (let pageNum = start; pageNum <= end; pageNum++) {
+          // Update progress
+          const progress = ((pageNum - start) / (end - start)) * 100;
+          progressBarFill.style.width = `${progress}%`;
+          progressText.textContent = `正在转换第 ${pageNum} 页，共 ${end - start + 1} 页`;
+          
+          // Get page
+          const page = await pdfDoc.getPage(pageNum);
+          
+          // Create viewport with custom scale
+          const viewport = page.getViewport({ scale: scale });
+          
+          // Create canvas
+          const canvas = document.createElement('canvas');
+          const context = canvas.getContext('2d');
+          
+          // Set canvas dimensions
+          canvas.width = viewport.width;
+          canvas.height = viewport.height;
+          
+          // Render page to canvas
+          const renderContext = {
+            canvasContext: context,
+            viewport: viewport
+          };
+          
+          await page.render(renderContext).promise;
+          
+          // Convert canvas to image
+          const imageDataUrl = canvas.toDataURL(`image/${format}`);
+          
+          // Store image data
+          convertedImages.push({
+            dataUrl: imageDataUrl,
+            pageNum: pageNum,
+            format: format
+          });
+        }
+        
+        // Update progress to complete
+        progressBarFill.style.width = '100%';
+        progressText.textContent = '转换完成！';
+        
+        // Show results
+        displayResults();
+      } catch (error) {
+        console.error('转换PDF失败:', error);
+        alert('转换PDF失败，请重试');
+      } finally {
+        // Re-enable convert button
+        convertButton.disabled = false;
+        convertButton.innerHTML = '开始转换 <i class="fa fa-magic ml-2"></i>';
+      }
+    }
+    
+    function displayResults() {
+      // Clear previous results
+      resultsContainer.innerHTML = '';
+      
+      // Add images to results container
+      convertedImages.forEach(image => {
+        const imageContainer = document.createElement('div');
+        imageContainer.className = 'bg-white rounded-lg shadow-sm overflow-hidden';
+        
+        const img = document.createElement('img');
+        img.src = image.dataUrl;
+        img.className = 'w-full h-auto object-cover';
+        img.alt = `第 ${image.pageNum} 页`;
+        
+        const imageInfo = document.createElement('div');
+        imageInfo.className = 'p-4';
+        
+        const pageNumber = document.createElement('p');
+        pageNumber.className = 'font-medium mb-2';
+        pageNumber.textContent = `第 ${image.pageNum} 页`;
+        
+        const downloadButton = document.createElement('button');
+        downloadButton.className = 'bg-primary hover:bg-blue-600 text-white px-4 py-2 rounded-lg text-sm transition-all-300 w-full';
+        downloadButton.innerHTML = '<i class="fa fa-download mr-1"></i> 下载';
+        downloadButton.addEventListener('click', () => downloadImage(image));
+        
+        imageInfo.appendChild(pageNumber);
+        imageInfo.appendChild(downloadButton);
+        
+        imageContainer.appendChild(img);
+        imageContainer.appendChild(imageInfo);
+        
+        resultsContainer.appendChild(imageContainer);
+      });
+      
+      // Show results
+      conversionResults.classList.remove('hidden');
+    }
+    
+    function downloadImage(image) {
+      const link = document.createElement('a');
+      link.href = image.dataUrl;
+      link.download = `${pdfFile.name.replace('.pdf', '')}_page_${image.pageNum}.${image.format}`;
+      link.click();
+    }
+    
+    function downloadAllImages() {
+      convertedImages.forEach(image => {
+        downloadImage(image);
+      });
+    }
+    
+    async function downloadImagesAsZip() {
+      if (convertedImages.length === 0) return;
+      
+      try {
+        // Create zip file
+        const zip = new JSZip();
+        
+        // Add images to zip
+        for (const image of convertedImages) {
+          // Extract base64 data (remove data URI prefix)
+          const base64Data = image.dataUrl.split(',')[1];
+          
+          // Add image to zip
+          zip.file(
+            `${pdfFile.name.replace('.pdf', '')}_page_${image.pageNum}.${image.format}`,
+            base64Data,
+            { base64: true }
+          );
+        }
+        
+        // Generate zip file
+        const zipContent = await zip.generateAsync({ type: 'blob' });
+        
+        // Download zip file
+        saveAs(zipContent, `${pdfFile.name.replace('.pdf', '')}_images.zip`);
+      } catch (error) {
+        console.error('创建ZIP文件失败:', error);
+        alert('创建ZIP文件失败，请重试');
+      }
+    }
+    
+    function resetState() {
+      // Reset file input
+      fileInput.value = '';
+      
+      // Reset variables
+      pdfDoc = null;
+      currentPage = 1;
+      totalPages = 0;
+      convertedImages = [];
+      pdfFile = null;
+      
+      // Hide elements
+      fileInfo.classList.add('hidden');
+      pdfPreview.classList.add('hidden');
+      conversionSettings.classList.add('hidden');
+      conversionProgress.classList.add('hidden');
+      conversionResults.classList.add('hidden');
+      actionButtons.classList.add('hidden');
+      
+      // Reset progress
+      progressBarFill.style.width = '0%';
+      progressText.textContent = '准备转换...';
+      
+      // Clear canvas
+      const ctx = previewCanvas.getContext('2d');
+      ctx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+    }
+    
+    function formatFileSize(bytes) {
+      if (bytes < 1024) return bytes + ' B';
+      else if (bytes < 1048576) return (bytes / 1024).toFixed(2) + ' KB';
+      else return (bytes / 1048576).toFixed(2) + ' MB';
+    }
+  </script>
+</body>
+</html>
