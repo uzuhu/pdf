@@ -4,6 +4,16 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>文档转换工具 - 图片转PDF & PDF转图片</title>
+    
+    <!-- Google Analytics 4 -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-JZDMHVVQD3"></script>
+    <script>
+        window.dataLayer = window.dataLayer || [];
+        function gtag(){dataLayer.push(arguments);}
+        gtag('js', new Date());
+        gtag('config', 'G-JZDMHVVQD3');
+    </script>
+    
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
@@ -653,10 +663,10 @@
                             <div class="file-input-button">点击选择图片或拖拽到这里</div>
                             <input type="file" id="fileInput" multiple accept="image/*">
                         </div>
-                        <!-- 移动端文件输入 -->
+                        <!-- 移动端文件输入 - 移除 capture 属性，允许选择相册 -->
                         <div class="file-input-container mobile-file-input">
                             <div class="file-input-button">点击选择图片</div>
-                            <input type="file" id="mobileFileInput" multiple accept="image/*" capture="camera">
+                            <input type="file" id="mobileFileInput" multiple accept="image/*">
                         </div>
                         <p class="drag-instruction">支持JPG、PNG等常见图片格式</p>
                     </div>
@@ -777,6 +787,9 @@
         
         <footer>
             <p>© 2023 UZUHU.COM | 免费在线图片转PDF和PDF转图片服务</p>
+            <p style="font-size: 0.7rem; margin-top: 5px;">
+                我们尊重您的隐私，不会收集或存储您上传的文件内容
+            </p>
         </footer>
     </div>
 
@@ -788,9 +801,16 @@
         const { jsPDF } = window.jspdf;
         
         // PDF预览相关变量
-        let renderedPages = new Set(); // 已渲染的页面
-        let isRendering = false; // 是否正在渲染
-        let batchSize = 10; // 每次加载的页面数量
+        let renderedPages = new Set();
+        let isRendering = false;
+        let batchSize = 10;
+        
+        // 使用统计
+        let usageStats = {
+            imageToPdf: 0,
+            pdfToImage: 0,
+            totalConversions: 0
+        };
         
         // DOM元素 - 图片转PDF
         const fileInput = document.getElementById('fileInput');
@@ -825,30 +845,87 @@
         const downloadAllBtn = document.getElementById('downloadAllBtn');
         const downloadZipBtn = document.getElementById('downloadZipBtn');
         
-        // 标签页切换
+        // ========== GA4 事件跟踪函数 ==========
+        function trackEvent(category, action, label, value) {
+            if (typeof gtag !== 'undefined') {
+                gtag('event', action, {
+                    'event_category': category,
+                    'event_label': label,
+                    'value': value
+                });
+            }
+            console.log(`GA4 Event: ${category} - ${action} - ${label} - ${value}`);
+        }
+        
+        function trackPageView(pageName) {
+            if (typeof gtag !== 'undefined') {
+                gtag('event', 'page_view', {
+                    'page_title': pageName,
+                    'page_location': window.location.href
+                });
+            }
+        }
+        
+        function trackUserProperties() {
+            const userProps = {
+                'device_type': getDeviceType(),
+                'browser': getBrowserType(),
+                'screen_resolution': `${screen.width}x${screen.height}`
+            };
+            
+            if (typeof gtag !== 'undefined') {
+                gtag('set', 'user_properties', userProps);
+            }
+        }
+        
+        function getDeviceType() {
+            const ua = navigator.userAgent;
+            if (/Mobile|Android|iPhone|iPad/.test(ua)) return 'mobile';
+            return 'desktop';
+        }
+        
+        function getBrowserType() {
+            const ua = navigator.userAgent;
+            if (ua.includes('Chrome')) return 'chrome';
+            if (ua.includes('Firefox')) return 'firefox';
+            if (ua.includes('Safari')) return 'safari';
+            return 'other';
+        }
+        
+        // ========== 初始化函数 ==========
+        function init() {
+            initImageToPdf();
+            initPdfToImage();
+            loadUsageStats();
+            initGA4();
+        }
+        
+        function initGA4() {
+            if (typeof gtag !== 'undefined') {
+                trackUserProperties();
+                trackPageView('文档转换工具主页');
+            }
+        }
+        
+        // ========== 标签页切换 ==========
         document.querySelectorAll('.nav-tab').forEach(tab => {
             tab.addEventListener('click', function(e) {
                 e.preventDefault();
                 
-                // 移除所有活动状态
                 document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
                 document.querySelectorAll('.tool-section').forEach(s => s.classList.remove('active'));
                 
-                // 添加当前活动状态
                 this.classList.add('active');
                 const tabId = this.getAttribute('data-tab');
                 document.getElementById(tabId).classList.add('active');
+                
+                // GA4 跟踪
+                trackEvent('navigation', 'tab_switch', tabId, 1);
+                trackPageView(`${tabId} 页面`);
             });
         });
         
-        // 初始化图片转PDF部分
-        initImageToPdf();
-        
-        // 初始化PDF转图片部分
-        initPdfToImage();
-        
         function initImageToPdf() {
-            // 事件监听器
             fileInput.addEventListener('change', handleFileSelect);
             mobileFileInput.addEventListener('change', handleFileSelect);
             orientationSelect.addEventListener('change', updatePreview);
@@ -858,7 +935,7 @@
             generateBtn.addEventListener('click', generatePDF);
             clearBtn.addEventListener('click', clearAllImages);
             
-            // 拖放功能 - 文件上传
+            // 拖放功能
             const fileInputContainer = document.querySelector('.file-input-container');
             fileInputContainer.addEventListener('dragover', (e) => {
                 e.preventDefault();
@@ -878,12 +955,10 @@
                 }
             });
             
-            // 更新间距显示值
             updateSpacingValue();
         }
         
         function initPdfToImage() {
-            // 事件监听器
             pdfFileInput.addEventListener('change', handlePdfFileSelect);
             imageQualitySlider.addEventListener('input', updateImageQualityValue);
             convertPdfBtn.addEventListener('click', convertPdfToImages);
@@ -891,19 +966,30 @@
             downloadAllBtn.addEventListener('click', downloadAllImages);
             downloadZipBtn.addEventListener('click', downloadZipFile);
             
-            // 添加滚动监听
             pdfPreviewContainer.addEventListener('scroll', handlePreviewScroll);
-            
-            // 更新图片质量显示值
             updateImageQualityValue();
         }
         
-        // 图片转PDF功能
+        // ========== 使用统计函数 ==========
+        function loadUsageStats() {
+            const saved = localStorage.getItem('docConverterStats');
+            if (saved) {
+                Object.assign(usageStats, JSON.parse(saved));
+            }
+        }
+        
+        function saveUsageStats() {
+            localStorage.setItem('docConverterStats', JSON.stringify(usageStats));
+        }
+        
+        // ========== 图片转PDF功能 ==========
         function handleFileSelect() {
             const files = fileInput.files.length > 0 ? fileInput.files : mobileFileInput.files;
             if (files.length === 0) return;
             
-            // 如果之前没有图片，现在显示清空按钮
+            // GA4 跟踪文件上传
+            trackEvent('file_upload', 'images_selected', `count_${files.length}`, files.length);
+            
             if (uploadedImages.length === 0) {
                 clearBtn.classList.remove('hidden');
             }
@@ -924,14 +1010,13 @@
                             width: img.width,
                             height: img.height,
                             name: file.name,
-                            rotation: 0, // 初始旋转角度
-                            fileSize: file.size // 原始文件大小
+                            rotation: 0,
+                            fileSize: file.size
                         });
                         
                         if (uploadedImages.length === files.length) {
                             updatePreview();
                             emptyMessage.classList.add('hidden');
-                            // 更新图片数量显示
                             updateImageCount();
                         }
                     };
@@ -940,7 +1025,6 @@
             });
         }
         
-        // 更新图片数量显示
         function updateImageCount() {
             if (uploadedImages.length > 0) {
                 imageCount.textContent = uploadedImages.length;
@@ -953,47 +1037,46 @@
         function rotateImage(index, degrees) {
             uploadedImages[index].rotation += degrees;
             
-            // 确保角度在0-360度之间
             if (uploadedImages[index].rotation >= 360) {
                 uploadedImages[index].rotation -= 360;
             } else if (uploadedImages[index].rotation < 0) {
                 uploadedImages[index].rotation += 360;
             }
             
-            // 更新预览
             updatePreview();
-            
             showStatus(`图片 ${index + 1} 已旋转 ${degrees > 0 ? '向右' : '向左'} 90度`, 'success');
+            
+            // GA4 跟踪图片操作
+            trackEvent('image_edit', 'rotate', `degrees_${degrees}`, 1);
         }
         
         function moveImage(index, direction) {
             if (direction === 'up' && index > 0) {
-                // 向上移动
                 [uploadedImages[index], uploadedImages[index - 1]] = [uploadedImages[index - 1], uploadedImages[index]];
                 updatePreview();
                 showStatus('图片顺序已调整', 'success');
+                trackEvent('image_edit', 'reorder', direction, 1);
             } else if (direction === 'down' && index < uploadedImages.length - 1) {
-                // 向下移动
                 [uploadedImages[index], uploadedImages[index + 1]] = [uploadedImages[index + 1], uploadedImages[index]];
                 updatePreview();
                 showStatus('图片顺序已调整', 'success');
+                trackEvent('image_edit', 'reorder', direction, 1);
             }
         }
         
         function removeImage(index) {
             uploadedImages.splice(index, 1);
             
-            // 如果没有图片了，隐藏清空按钮
             if (uploadedImages.length === 0) {
                 clearBtn.classList.add('hidden');
                 emptyMessage.classList.remove('hidden');
             }
             
-            // 更新预览
             updatePreview();
             updateImageCount();
-            
             showStatus('图片已删除', 'success');
+            
+            trackEvent('image_edit', 'remove', 'single_image', 1);
         }
         
         function clearAllImages() {
@@ -1005,6 +1088,8 @@
             mobileFileInput.value = '';
             updateImageCount();
             showStatus('所有图片已清空', 'success');
+            
+            trackEvent('image_edit', 'clear_all', 'all_images', 1);
         }
         
         function updateSpacingValue() {
@@ -1020,44 +1105,24 @@
             const imagesPerPage = parseInt(imagesPerPageSelect.value);
             const spacing = parseInt(spacingSlider.value);
             
-            // 计算页面尺寸 (mm)
             const pageWidth = orientation === 'portrait' ? 210 : 297;
             const pageHeight = orientation === 'portrait' ? 297 : 210;
-            
-            // 计算可用区域 (减去边距)
-            const margin = 20; // 20mm 边距
+            const margin = 20;
             const usableWidth = pageWidth - 2 * margin;
             const usableHeight = pageHeight - 2 * margin;
             
-            // 计算网格布局
             let cols, rows;
             switch(imagesPerPage) {
-                case 1:
-                    cols = 1; rows = 1;
-                    break;
-                case 2:
-                    cols = orientation === 'portrait' ? 1 : 2;
-                    rows = orientation === 'portrait' ? 2 : 1;
-                    break;
-                case 4:
-                    cols = 2; rows = 2;
-                    break;
-                case 6:
-                    cols = orientation === 'portrait' ? 2 : 3;
-                    rows = orientation === 'portrait' ? 3 : 2;
-                    break;
-                case 9:
-                    cols = 3; rows = 3;
-                    break;
-                default:
-                    cols = 2; rows = 2;
+                case 1: cols = 1; rows = 1; break;
+                case 2: cols = orientation === 'portrait' ? 1 : 2; rows = orientation === 'portrait' ? 2 : 1; break;
+                case 4: cols = 2; rows = 2; break;
+                case 6: cols = orientation === 'portrait' ? 2 : 3; rows = orientation === 'portrait' ? 3 : 2; break;
+                case 9: cols = 3; rows = 3; break;
+                default: cols = 2; rows = 2;
             }
             
-            // 计算每个图片区域的尺寸
             const cellWidth = (usableWidth - (cols - 1) * spacing) / cols;
             const cellHeight = (usableHeight - (rows - 1) * spacing) / rows;
-            
-            // 分页处理
             const totalPages = Math.ceil(uploadedImages.length / imagesPerPage);
             
             for (let pageIndex = 0; pageIndex < totalPages; pageIndex++) {
@@ -1072,7 +1137,6 @@
                 grid.style.gap = `${spacing}mm`;
                 page.appendChild(grid);
                 
-                // 添加图片到当前页
                 const startIndex = pageIndex * imagesPerPage;
                 const endIndex = Math.min(startIndex + imagesPerPage, uploadedImages.length);
                 
@@ -1085,40 +1149,32 @@
                     img.src = imageData.src;
                     img.alt = imageData.name;
                     
-                    // 应用旋转
                     if (imageData.rotation !== 0) {
                         img.style.transform = `rotate(${imageData.rotation}deg)`;
                     }
                     
-                    // 计算图片在单元格中的最佳尺寸
                     const imgRatio = imageData.width / imageData.height;
                     const cellRatio = cellWidth / cellHeight;
                     
                     if (imgRatio > cellRatio) {
-                        // 图片更宽，按宽度适配
                         img.style.width = '100%';
                         img.style.height = 'auto';
                     } else {
-                        // 图片更高，按高度适配
                         img.style.width = 'auto';
                         img.style.height = '100%';
                     }
                     
-                    // 添加序号
                     const number = document.createElement('div');
                     number.className = 'image-number';
                     number.textContent = i + 1;
                     
-                    // 添加旋转指示器
                     const rotationIndicator = document.createElement('div');
                     rotationIndicator.className = 'rotation-indicator';
                     rotationIndicator.textContent = `${imageData.rotation}°`;
                     
-                    // 添加控制按钮
                     const controls = document.createElement('div');
                     controls.className = 'image-controls';
                     
-                    // 左旋转按钮
                     const rotateLeftBtn = document.createElement('button');
                     rotateLeftBtn.className = 'control-btn';
                     rotateLeftBtn.innerHTML = '↶';
@@ -1128,7 +1184,6 @@
                         rotateImage(i, -90);
                     });
                     
-                    // 删除按钮
                     const deleteBtn = document.createElement('button');
                     deleteBtn.className = 'control-btn';
                     deleteBtn.innerHTML = '×';
@@ -1138,7 +1193,6 @@
                         removeImage(i);
                     });
                     
-                    // 右旋转按钮
                     const rotateRightBtn = document.createElement('button');
                     rotateRightBtn.className = 'control-btn';
                     rotateRightBtn.innerHTML = '↷';
@@ -1152,11 +1206,9 @@
                     controls.appendChild(deleteBtn);
                     controls.appendChild(rotateRightBtn);
                     
-                    // 添加顺序控制按钮
                     const orderControls = document.createElement('div');
                     orderControls.className = 'order-controls';
                     
-                    // 上移按钮
                     const moveUpBtn = document.createElement('button');
                     moveUpBtn.className = 'order-btn';
                     moveUpBtn.innerHTML = '↑';
@@ -1166,7 +1218,6 @@
                         moveImage(i, 'up');
                     });
                     
-                    // 下移按钮
                     const moveDownBtn = document.createElement('button');
                     moveDownBtn.className = 'order-btn';
                     moveDownBtn.innerHTML = '↓';
@@ -1189,7 +1240,6 @@
             }
         }
 
-        // 创建旋转后的图片数据URL - 修复黑边问题
         function createRotatedImageData(imageData, quality) {
             return new Promise((resolve) => {
                 const canvas = document.createElement('canvas');
@@ -1197,7 +1247,6 @@
                 const img = new Image();
                 
                 img.onload = function() {
-                    // 计算旋转后的尺寸
                     let canvasWidth, canvasHeight;
                     
                     if (imageData.rotation === 90 || imageData.rotation === 270) {
@@ -1208,23 +1257,18 @@
                         canvasHeight = img.height;
                     }
                     
-                    // 设置canvas尺寸
                     canvas.width = canvasWidth;
                     canvas.height = canvasHeight;
                     
-                    // 设置白色背景
                     ctx.fillStyle = 'white';
                     ctx.fillRect(0, 0, canvasWidth, canvasHeight);
                     
-                    // 平移并旋转
                     ctx.translate(canvasWidth / 2, canvasHeight / 2);
                     ctx.rotate(imageData.rotation * Math.PI / 180);
                     ctx.translate(-img.width / 2, -img.height / 2);
                     
-                    // 绘制图片
                     ctx.drawImage(img, 0, 0);
                     
-                    // 获取数据URL
                     const imgData = canvas.toDataURL('image/jpeg', quality);
                     resolve(imgData);
                 };
@@ -1233,12 +1277,16 @@
             });
         }
         
-        // 生成PDF
         async function generatePDF() {
             if (uploadedImages.length === 0) {
                 showStatus('请先上传图片', 'error');
                 return;
             }
+            
+            // GA4 跟踪转换开始
+            trackEvent('conversion', 'image_to_pdf_start', 
+                       `images_${uploadedImages.length}_quality_${qualitySelect.value}`, 
+                       uploadedImages.length);
             
             showStatus('正在生成PDF，请稍候...', '');
             generateBtn.disabled = true;
@@ -1249,51 +1297,30 @@
                 const spacing = parseInt(spacingSlider.value);
                 const quality = parseFloat(qualitySelect.value);
                 
-                // 创建PDF文档
                 const pdf = new jsPDF({
                     orientation: orientation,
                     unit: 'mm',
                     format: 'a4'
                 });
                 
-                // 计算页面尺寸
                 const pageWidth = pdf.internal.pageSize.getWidth();
                 const pageHeight = pdf.internal.pageSize.getHeight();
-                
-                // 计算可用区域
-                const margin = 20; // 20mm 边距
+                const margin = 20;
                 const usableWidth = pageWidth - 2 * margin;
                 const usableHeight = pageHeight - 2 * margin;
                 
-                // 计算网格布局
                 let cols, rows;
                 switch(imagesPerPage) {
-                    case 1:
-                        cols = 1; rows = 1;
-                        break;
-                    case 2:
-                        cols = orientation === 'portrait' ? 1 : 2;
-                        rows = orientation === 'portrait' ? 2 : 1;
-                        break;
-                    case 4:
-                        cols = 2; rows = 2;
-                        break;
-                    case 6:
-                        cols = orientation === 'portrait' ? 2 : 3;
-                        rows = orientation === 'portrait' ? 3 : 2;
-                        break;
-                    case 9:
-                        cols = 3; rows = 3;
-                        break;
-                    default:
-                        cols = 2; rows = 2;
+                    case 1: cols = 1; rows = 1; break;
+                    case 2: cols = orientation === 'portrait' ? 1 : 2; rows = orientation === 'portrait' ? 2 : 1; break;
+                    case 4: cols = 2; rows = 2; break;
+                    case 6: cols = orientation === 'portrait' ? 2 : 3; rows = orientation === 'portrait' ? 3 : 2; break;
+                    case 9: cols = 3; rows = 3; break;
+                    default: cols = 2; rows = 2;
                 }
                 
-                // 计算每个图片区域的尺寸
                 const cellWidth = (usableWidth - (cols - 1) * spacing) / cols;
                 const cellHeight = (usableHeight - (rows - 1) * spacing) / rows;
-                
-                // 分页处理
                 const totalPages = Math.ceil(uploadedImages.length / imagesPerPage);
                 
                 for (let pageIndex = 0; pageIndex < totalPages; pageIndex++) {
@@ -1301,26 +1328,20 @@
                         pdf.addPage();
                     }
                     
-                    // 添加图片到当前页
                     const startIndex = pageIndex * imagesPerPage;
                     const endIndex = Math.min(startIndex + imagesPerPage, uploadedImages.length);
                     
                     for (let i = startIndex; i < endIndex; i++) {
                         const imageData = uploadedImages[i];
-                        
-                        // 计算当前图片在网格中的位置
                         const gridIndex = i - startIndex;
                         const row = Math.floor(gridIndex / cols);
                         const col = gridIndex % cols;
                         
-                        // 计算图片位置
                         const x = margin + col * (cellWidth + spacing);
                         const y = margin + row * (cellHeight + spacing);
                         
-                        // 创建旋转后的图片
                         const rotatedImageData = await createRotatedImageData(imageData, quality);
                         
-                        // 添加图片到PDF
                         pdf.addImage(
                             rotatedImageData,
                             'JPEG',
@@ -1332,10 +1353,21 @@
                     }
                 }
                 
-                // 保存PDF
+                // 更新使用统计
+                usageStats.imageToPdf++;
+                usageStats.totalConversions++;
+                saveUsageStats();
+                
+                // GA4 跟踪转换成功
+                trackEvent('conversion', 'image_to_pdf_success', 
+                           `pages_${totalPages}_images_${uploadedImages.length}`, 
+                           totalPages);
+                
                 pdf.save('converted_images.pdf');
                 showStatus('PDF生成成功！', 'success');
             } catch (error) {
+                // GA4 跟踪转换失败
+                trackEvent('conversion', 'image_to_pdf_error', error.message, 0);
                 console.error('生成PDF时出错:', error);
                 showStatus('生成PDF时出错，请重试', 'error');
             } finally {
@@ -1343,18 +1375,19 @@
             }
         }
         
-        // PDF转图片功能
+        // ========== PDF转图片功能 ==========
         function handlePdfFileSelect() {
             const file = pdfFileInput.files[0];
             if (!file) return;
             
-            // 显示文件信息
+            // GA4 跟踪PDF上传
+            trackEvent('file_upload', 'pdf_selected', `size_${file.size}`, 1);
+            
             pdfFileName.textContent = file.name;
             pdfPageCount.textContent = '正在加载...';
             pdfFileInfo.classList.remove('hidden');
             clearPdfBtn.classList.remove('hidden');
             
-            // 重置状态
             pdfImages = [];
             pdfDoc = null;
             renderedPages.clear();
@@ -1367,19 +1400,21 @@
             reader.onload = function(e) {
                 const typedarray = new Uint8Array(e.target.result);
                 
-                // 设置PDF.js worker
                 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
                 
-                // 加载PDF文档
                 pdfjsLib.getDocument(typedarray).promise.then(function(pdf) {
                     pdfDoc = pdf;
                     pdfPageCount.textContent = `共 ${pdf.numPages} 页`;
                     showPdfStatus('PDF文件加载成功', 'success');
                     
-                    // 初始化网格预览
+                    // GA4 跟踪PDF加载成功
+                    trackEvent('pdf', 'load_success', `pages_${pdf.numPages}`, pdf.numPages);
+                    
                     initGridPreview();
                     
                 }).catch(function(error) {
+                    // GA4 跟踪PDF加载失败
+                    trackEvent('pdf', 'load_error', error.message, 0);
                     console.error('加载PDF时出错:', error);
                     showPdfStatus('加载PDF文件失败，请检查文件格式', 'error');
                 });
@@ -1387,55 +1422,45 @@
             reader.readAsArrayBuffer(file);
         }
         
-        // 初始化网格预览
         function initGridPreview() {
             if (!pdfDoc) return;
             
             pdfPreviewContainer.innerHTML = '';
             pdfEmptyMessage.classList.add('hidden');
             
-            // 创建网格容器
             const gridContainer = document.createElement('div');
             gridContainer.className = 'pdf-preview-container';
             gridContainer.id = 'pdfGridContainer';
             pdfPreviewContainer.appendChild(gridContainer);
             
-            // 初始加载第一批页面
             loadMorePages(1, batchSize);
         }
         
-        // 加载更多页面
         function loadMorePages(startPage, count) {
             if (!pdfDoc || isRendering) return;
             
             isRendering = true;
             const endPage = Math.min(startPage + count - 1, pdfDoc.numPages);
             
-            // 显示加载指示器
             if (startPage > 1) {
                 showLoadingIndicator();
             }
             
-            // 批量渲染页面
             const renderPromises = [];
             
             for (let pageNumber = startPage; pageNumber <= endPage; pageNumber++) {
                 if (renderedPages.has(pageNumber)) continue;
                 
                 renderedPages.add(pageNumber);
-                
                 const promise = renderPageToGrid(pageNumber);
                 renderPromises.push(promise);
             }
             
-            // 等待所有页面渲染完成
             Promise.all(renderPromises).then(() => {
                 isRendering = false;
                 removeLoadingIndicator();
                 
-                // 检查是否还有更多页面需要加载
                 if (endPage < pdfDoc.numPages) {
-                    // 如果用户已经滚动到底部附近，自动加载更多
                     checkAutoLoadMore();
                 }
             }).catch(error => {
@@ -1445,7 +1470,6 @@
             });
         }
         
-        // 渲染单个页面到网格
         function renderPageToGrid(pageNumber) {
             return pdfDoc.getPage(pageNumber).then(function(page) {
                 const viewport = page.getViewport({ scale: 0.5 });
@@ -1485,12 +1509,10 @@
             });
         }
         
-        // 显示加载指示器
         function showLoadingIndicator() {
             const gridContainer = document.getElementById('pdfGridContainer');
             if (!gridContainer) return;
             
-            // 检查是否已经存在加载指示器
             if (document.getElementById('loadingIndicator')) return;
             
             const loadingDiv = document.createElement('div');
@@ -1500,7 +1522,6 @@
             gridContainer.appendChild(loadingDiv);
         }
         
-        // 移除加载指示器
         function removeLoadingIndicator() {
             const loadingIndicator = document.getElementById('loadingIndicator');
             if (loadingIndicator) {
@@ -1508,14 +1529,11 @@
             }
         }
         
-        // 处理预览区域滚动
         function handlePreviewScroll() {
             if (isRendering || !pdfDoc) return;
-            
             checkAutoLoadMore();
         }
         
-        // 检查是否需要自动加载更多页面
         function checkAutoLoadMore() {
             const gridContainer = document.getElementById('pdfGridContainer');
             if (!gridContainer) return;
@@ -1525,7 +1543,6 @@
             const scrollHeight = container.scrollHeight;
             const clientHeight = container.clientHeight;
             
-            // 当滚动到距离底部100px时加载更多
             if (scrollTop + clientHeight >= scrollHeight - 100) {
                 const nextStartPage = renderedPages.size + 1;
                 if (nextStartPage <= pdfDoc.numPages) {
@@ -1541,7 +1558,6 @@
         
         function parsePageRange(rangeStr, totalPages) {
             if (!rangeStr.trim()) {
-                // 如果为空，返回所有页面
                 return Array.from({length: totalPages}, (_, i) => i + 1);
             }
             
@@ -1551,7 +1567,6 @@
             for (const part of parts) {
                 const trimmed = part.trim();
                 if (trimmed.includes('-')) {
-                    // 处理范围
                     const [start, end] = trimmed.split('-').map(s => parseInt(s.trim()));
                     if (isNaN(start) || isNaN(end)) continue;
                     
@@ -1562,7 +1577,6 @@
                         pages.add(i);
                     }
                 } else {
-                    // 处理单个页码
                     const page = parseInt(trimmed);
                     if (!isNaN(page) && page >= 1 && page <= totalPages) {
                         pages.add(page);
@@ -1579,6 +1593,11 @@
                 return;
             }
             
+            // GA4 跟踪转换开始
+            trackEvent('conversion', 'pdf_to_image_start', 
+                       `format_${imageFormatSelect.value}_quality_${imageQualitySlider.value}`, 
+                       pdfDoc.numPages);
+            
             showPdfStatus('正在转换PDF，请稍候...', '');
             convertPdfBtn.disabled = true;
             
@@ -1587,7 +1606,6 @@
                 const quality = parseFloat(imageQualitySlider.value);
                 const totalPages = pdfDoc.numPages;
                 
-                // 解析页码范围
                 const pageRange = parsePageRange(pageRangeInput.value, totalPages);
                 
                 if (pageRange.length === 0) {
@@ -1596,12 +1614,10 @@
                     return;
                 }
                 
-                // 清空之前的预览
                 pdfImages = [];
                 pdfPreviewContainer.innerHTML = '';
                 pdfEmptyMessage.classList.add('hidden');
                 
-                // 转换每一页
                 for (let i = 0; i < pageRange.length; i++) {
                     const pageNumber = pageRange[i];
                     
@@ -1619,35 +1635,42 @@
                             viewport: viewport
                         }).promise;
                         
-                        // 获取图片数据URL
                         const imgData = canvas.toDataURL(`image/${format}`, quality);
                         
-                        // 添加到图片数组
                         pdfImages.push({
                             dataUrl: imgData,
                             pageNumber: pageNumber,
                             format: format
                         });
                         
-                        // 更新状态
                         showPdfStatus(`正在转换第 ${i + 1}/${pageRange.length} 页...`, '');
                     } catch (error) {
                         console.error(`转换第 ${pageNumber} 页时出错:`, error);
                     }
                 }
                 
-                // 显示下载按钮
                 if (pdfImages.length > 0) {
+                    // 更新使用统计
+                    usageStats.pdfToImage++;
+                    usageStats.totalConversions++;
+                    saveUsageStats();
+                    
+                    // GA4 跟踪转换成功
+                    trackEvent('conversion', 'pdf_to_image_success', 
+                               `pages_${pdfImages.length}_format_${imageFormatSelect.value}`, 
+                               pdfImages.length);
+                    
                     downloadAllBtn.classList.remove('hidden');
                     downloadZipBtn.classList.remove('hidden');
                     showPdfStatus(`成功转换 ${pdfImages.length} 页`, 'success');
                     
-                    // 重新初始化网格预览显示转换后的页面
                     initGridPreviewForConverted();
                 } else {
                     showPdfStatus('没有成功转换任何页面', 'error');
                 }
             } catch (error) {
+                // GA4 跟踪转换失败
+                trackEvent('conversion', 'pdf_to_image_error', error.message, 0);
                 console.error('转换PDF时出错:', error);
                 showPdfStatus('转换PDF时出错，请重试', 'error');
             } finally {
@@ -1655,7 +1678,6 @@
             }
         }
         
-        // 为转换后的图片初始化网格预览
         function initGridPreviewForConverted() {
             pdfPreviewContainer.innerHTML = '';
             pdfEmptyMessage.classList.add('hidden');
@@ -1664,7 +1686,6 @@
             gridContainer.className = 'pdf-preview-container';
             pdfPreviewContainer.appendChild(gridContainer);
             
-            // 显示所有转换后的图片
             pdfImages.forEach(img => {
                 const previewDiv = document.createElement('div');
                 previewDiv.className = 'pdf-page-preview';
@@ -1689,7 +1710,9 @@
                 return;
             }
             
-            // 逐个下载图片
+            // GA4 跟踪下载
+            trackEvent('download', 'all_images', `count_${pdfImages.length}`, pdfImages.length);
+            
             pdfImages.forEach((img, index) => {
                 const link = document.createElement('a');
                 link.href = img.dataUrl;
@@ -1706,18 +1729,18 @@
                 return;
             }
             
+            // GA4 跟踪压缩包下载
+            trackEvent('download', 'zip_file', `pages_${pdfImages.length}`, pdfImages.length);
+            
             showPdfStatus('正在创建压缩包，请稍候...', '');
             
             const zip = new JSZip();
             
-            // 添加所有图片到压缩包
             pdfImages.forEach(img => {
-                // 从dataURL中提取图片数据
                 const base64Data = img.dataUrl.split(',')[1];
                 zip.file(`page_${img.pageNumber}.${img.format}`, base64Data, {base64: true});
             });
             
-            // 生成压缩包并下载
             zip.generateAsync({type: 'blob'}).then(function(content) {
                 saveAs(content, 'converted_pages.zip');
                 showPdfStatus('压缩包下载成功', 'success');
@@ -1739,9 +1762,11 @@
             pdfDoc = null;
             renderedPages.clear();
             showPdfStatus('PDF文件已清除', 'success');
+            
+            trackEvent('file_upload', 'pdf_cleared', 'user_action', 1);
         }
         
-        // 通用函数
+        // ========== 通用函数 ==========
         function showStatus(message, type) {
             statusDiv.textContent = message;
             statusDiv.className = 'status';
@@ -1750,7 +1775,6 @@
             }
             statusDiv.classList.remove('hidden');
             
-            // 3秒后自动隐藏
             setTimeout(() => {
                 statusDiv.classList.add('hidden');
             }, 3000);
@@ -1764,11 +1788,13 @@
             }
             pdfStatusDiv.classList.remove('hidden');
             
-            // 3秒后自动隐藏
             setTimeout(() => {
                 pdfStatusDiv.classList.add('hidden');
             }, 3000);
         }
+        
+        // 初始化应用
+        document.addEventListener('DOMContentLoaded', init);
     </script>
 </body>
 </html>
