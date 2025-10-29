@@ -892,80 +892,19 @@
             return 'other';
         }
         
-        // ========== 移动端文件选择优化 ==========
-        function initMobileFileSelection() {
-            // 移动端文件输入 - 直接支持多选
-            mobileFileInput.addEventListener('click', function(e) {
-                // 在移动端，确保点击时触发文件选择
-                // 大多数现代移动浏览器会自动处理多选
-                trackEvent('mobile_selection', 'album_multi', 'user_action', 1);
-            });
-            
-            mobileFileInput.addEventListener('change', function(e) {
-                if (e.target.files && e.target.files.length > 0) {
-                    handleFileSelection(e.target.files);
-                }
-            });
-        }
-        
-        // 统一的文件选择处理
-        function handleFileSelection(files) {
-            if (files.length === 0) return;
-            
-            // GA4 跟踪文件上传
-            trackEvent('file_upload', 'images_selected', `count_${files.length}`, files.length);
-            
-            if (uploadedImages.length === 0) {
-                clearBtn.classList.remove('hidden');
-            }
-            
-            let processedCount = 0;
-            
-            Array.from(files).forEach(file => {
-                if (!file.type.match('image.*')) {
-                    showStatus('只能上传图片文件', 'error');
-                    return;
-                }
-                
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    const img = new Image();
-                    img.src = e.target.result;
-                    img.onload = () => {
-                        uploadedImages.push({
-                            src: e.target.result,
-                            width: img.width,
-                            height: img.height,
-                            name: file.name,
-                            rotation: 0,
-                            fileSize: file.size
-                        });
-                        
-                        processedCount++;
-                        
-                        if (processedCount === files.length) {
-                            updatePreview();
-                            emptyMessage.classList.add('hidden');
-                            updateImageCount();
-                            showStatus(`成功添加 ${files.length} 张图片`, 'success');
-                        }
-                    };
-                };
-                reader.onerror = () => {
-                    processedCount++;
-                    console.error('文件读取失败:', file.name);
-                };
-                reader.readAsDataURL(file);
-            });
-        }
-        
         // ========== 初始化函数 ==========
         function init() {
+            console.log('初始化应用...');
             initImageToPdf();
             initPdfToImage();
-            initMobileFileSelection();
             loadUsageStats();
             initGA4();
+            
+            // 测试日志
+            console.log('文件输入元素:', {
+                fileInput: fileInput,
+                mobileFileInput: mobileFileInput
+            });
         }
         
         function initGA4() {
@@ -994,7 +933,17 @@
         });
         
         function initImageToPdf() {
+            console.log('初始化图片转PDF功能...');
+            
+            // 桌面端文件输入
             fileInput.addEventListener('change', function(e) {
+                console.log('桌面端文件选择:', e.target.files);
+                handleFileSelection(e.target.files);
+            });
+            
+            // 移动端文件输入
+            mobileFileInput.addEventListener('change', function(e) {
+                console.log('移动端文件选择:', e.target.files);
                 handleFileSelection(e.target.files);
             });
             
@@ -1006,22 +955,25 @@
             clearBtn.addEventListener('click', clearAllImages);
             
             // 拖放功能
-            const fileInputContainer = document.querySelector('.file-input-container');
-            fileInputContainer.addEventListener('dragover', (e) => {
-                e.preventDefault();
-                fileInputContainer.style.backgroundColor = '#e9ecef';
-            });
-            
-            fileInputContainer.addEventListener('dragleave', () => {
-                fileInputContainer.style.backgroundColor = '';
-            });
-            
-            fileInputContainer.addEventListener('drop', (e) => {
-                e.preventDefault();
-                fileInputContainer.style.backgroundColor = '';
-                if (e.dataTransfer.files.length > 0) {
-                    handleFileSelection(e.dataTransfer.files);
-                }
+            const fileInputContainers = document.querySelectorAll('.file-input-container');
+            fileInputContainers.forEach(container => {
+                container.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    container.style.backgroundColor = '#e9ecef';
+                });
+                
+                container.addEventListener('dragleave', () => {
+                    container.style.backgroundColor = '';
+                });
+                
+                container.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    container.style.backgroundColor = '';
+                    if (e.dataTransfer.files.length > 0) {
+                        console.log('拖放文件:', e.dataTransfer.files);
+                        handleFileSelection(e.dataTransfer.files);
+                    }
+                });
             });
             
             updateSpacingValue();
@@ -1049,6 +1001,76 @@
         
         function saveUsageStats() {
             localStorage.setItem('docConverterStats', JSON.stringify(usageStats));
+        }
+        
+        // ========== 文件选择处理 ==========
+        function handleFileSelection(files) {
+            console.log('处理文件选择，文件数量:', files.length);
+            
+            if (files.length === 0) {
+                console.log('没有选择文件');
+                return;
+            }
+            
+            // GA4 跟踪文件上传
+            trackEvent('file_upload', 'images_selected', `count_${files.length}`, files.length);
+            
+            if (uploadedImages.length === 0) {
+                clearBtn.classList.remove('hidden');
+            }
+            
+            let processedCount = 0;
+            let validFiles = 0;
+            
+            Array.from(files).forEach(file => {
+                console.log('处理文件:', file.name, file.type, file.size);
+                
+                if (!file.type.match('image.*')) {
+                    console.log('跳过非图片文件:', file.name);
+                    showStatus('只能上传图片文件', 'error');
+                    processedCount++;
+                    return;
+                }
+                
+                validFiles++;
+                
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    console.log('文件读取成功:', file.name);
+                    const img = new Image();
+                    img.src = e.target.result;
+                    img.onload = () => {
+                        uploadedImages.push({
+                            src: e.target.result,
+                            width: img.width,
+                            height: img.height,
+                            name: file.name,
+                            rotation: 0,
+                            fileSize: file.size
+                        });
+                        
+                        processedCount++;
+                        console.log(`已处理 ${processedCount}/${files.length} 个文件`);
+                        
+                        if (processedCount === files.length) {
+                            console.log('所有文件处理完成，更新预览');
+                            updatePreview();
+                            emptyMessage.classList.add('hidden');
+                            updateImageCount();
+                            showStatus(`成功添加 ${validFiles} 张图片`, 'success');
+                        }
+                    };
+                    img.onerror = () => {
+                        console.error('图片加载失败:', file.name);
+                        processedCount++;
+                    };
+                };
+                reader.onerror = () => {
+                    console.error('文件读取失败:', file.name);
+                    processedCount++;
+                };
+                reader.readAsDataURL(file);
+            });
         }
         
         // ========== 图片转PDF功能 ==========
@@ -1124,7 +1146,12 @@
         }
         
         function updatePreview() {
-            if (uploadedImages.length === 0) return;
+            console.log('更新预览，图片数量:', uploadedImages.length);
+            
+            if (uploadedImages.length === 0) {
+                console.log('没有图片可预览');
+                return;
+            }
             
             previewContainer.innerHTML = '';
             
@@ -1151,6 +1178,8 @@
             const cellWidth = (usableWidth - (cols - 1) * spacing) / cols;
             const cellHeight = (usableHeight - (rows - 1) * spacing) / rows;
             const totalPages = Math.ceil(uploadedImages.length / imagesPerPage);
+            
+            console.log(`创建 ${totalPages} 页预览，每页 ${imagesPerPage} 张图片`);
             
             for (let pageIndex = 0; pageIndex < totalPages; pageIndex++) {
                 const page = document.createElement('div');
@@ -1265,6 +1294,8 @@
                     grid.appendChild(cell);
                 }
             }
+            
+            console.log('预览更新完成');
         }
 
         function createRotatedImageData(imageData, quality) {
@@ -1402,10 +1433,58 @@
             }
         }
         
+        // ========== PDF转图片功能 ==========
+        function handlePdfFileSelect() {
+            const file = pdfFileInput.files[0];
+            if (!file) return;
+            
+            // GA4 跟踪PDF上传
+            trackEvent('file_upload', 'pdf_selected', `size_${file.size}`, 1);
+            
+            pdfFileName.textContent = file.name;
+            pdfPageCount.textContent = '正在加载...';
+            pdfFileInfo.classList.remove('hidden');
+            clearPdfBtn.classList.remove('hidden');
+            
+            pdfImages = [];
+            pdfDoc = null;
+            renderedPages.clear();
+            pdfPreviewContainer.innerHTML = '';
+            pdfEmptyMessage.classList.remove('hidden');
+            downloadAllBtn.classList.add('hidden');
+            downloadZipBtn.classList.add('hidden');
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const typedarray = new Uint8Array(e.target.result);
+                
+                pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+                
+                pdfjsLib.getDocument(typedarray).promise.then(function(pdf) {
+                    pdfDoc = pdf;
+                    pdfPageCount.textContent = `共 ${pdf.numPages} 页`;
+                    showPdfStatus('PDF文件加载成功', 'success');
+                    
+                    // GA4 跟踪PDF加载成功
+                    trackEvent('pdf', 'load_success', `pages_${pdf.numPages}`, pdf.numPages);
+                    
+                    initGridPreview();
+                    
+                }).catch(function(error) {
+                    // GA4 跟踪PDF加载失败
+                    trackEvent('pdf', 'load_error', error.message, 0);
+                    console.error('加载PDF时出错:', error);
+                    showPdfStatus('加载PDF文件失败，请检查文件格式', 'error');
+                });
+            };
+            reader.readAsArrayBuffer(file);
+        }
+        
         // ... (PDF转图片的其他函数保持不变) ...
 
         // ========== 通用函数 ==========
         function showStatus(message, type) {
+            console.log('显示状态:', message, type);
             statusDiv.textContent = message;
             statusDiv.className = 'status';
             if (type) {
