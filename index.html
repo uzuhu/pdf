@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>文档转换工具 - 图片转PDF & PDF转图片</title>
+    <title>多图片拼接合成一张PDF，在线JPG-PDF互转 - UZUHU.COM</title>
     
     <!-- Google Analytics 4 -->
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-JZDMHVVQD3"></script>
@@ -1480,8 +1480,307 @@
             reader.readAsArrayBuffer(file);
         }
         
-        // ... (PDF转图片的其他函数保持不变) ...
-
+        function initGridPreview() {
+            if (!pdfDoc) return;
+            
+            pdfPreviewContainer.innerHTML = '';
+            pdfEmptyMessage.classList.add('hidden');
+            
+            const container = document.createElement('div');
+            container.className = 'pdf-preview-container';
+            pdfPreviewContainer.appendChild(container);
+            
+            // 开始渲染第一页
+            renderPageBatch(1, Math.min(batchSize, pdfDoc.numPages));
+        }
+        
+        function renderPageBatch(startPage, endPage) {
+            if (!pdfDoc || isRendering) return;
+            
+            isRendering = true;
+            const container = pdfPreviewContainer.querySelector('.pdf-preview-container');
+            
+            for (let pageNum = startPage; pageNum <= endPage; pageNum++) {
+                if (renderedPages.has(pageNum)) continue;
+                
+                renderPage(pageNum, container).then(() => {
+                    renderedPages.add(pageNum);
+                    
+                    // 如果这是最后一批页面，显示下载按钮
+                    if (renderedPages.size === pdfDoc.numPages) {
+                        downloadAllBtn.classList.remove('hidden');
+                        downloadZipBtn.classList.remove('hidden');
+                        isRendering = false;
+                    }
+                }).catch(error => {
+                    console.error(`渲染第 ${pageNum} 页时出错:`, error);
+                    isRendering = false;
+                });
+            }
+        }
+        
+        function renderPage(pageNum, container) {
+            return new Promise((resolve, reject) => {
+                pdfDoc.getPage(pageNum).then(function(page) {
+                    const viewport = page.getViewport({ scale: 0.5 });
+                    
+                    const canvas = document.createElement('canvas');
+                    const context = canvas.getContext('2d');
+                    canvas.width = viewport.width;
+                    canvas.height = viewport.height;
+                    
+                    const renderContext = {
+                        canvasContext: context,
+                        viewport: viewport
+                    };
+                    
+                    page.render(renderContext).promise.then(function() {
+                        const imgData = canvas.toDataURL('image/png');
+                        
+                        const pagePreview = document.createElement('div');
+                        pagePreview.className = 'pdf-page-preview';
+                        
+                        const img = document.createElement('img');
+                        img.src = imgData;
+                        img.alt = `第 ${pageNum} 页`;
+                        
+                        const pageNumber = document.createElement('div');
+                        pageNumber.className = 'page-number';
+                        pageNumber.textContent = `第 ${pageNum} 页`;
+                        
+                        pagePreview.appendChild(img);
+                        pagePreview.appendChild(pageNumber);
+                        container.appendChild(pagePreview);
+                        
+                        // 存储图片数据供下载使用
+                        pdfImages[pageNum - 1] = {
+                            data: imgData,
+                            pageNumber: pageNum
+                        };
+                        
+                        resolve();
+                    }).catch(reject);
+                }).catch(reject);
+            });
+        }
+        
+        function handlePreviewScroll() {
+            if (!pdfDoc || isRendering) return;
+            
+            const container = pdfPreviewContainer.querySelector('.pdf-preview-container');
+            if (!container) return;
+            
+            const scrollTop = pdfPreviewContainer.scrollTop;
+            const scrollHeight = pdfPreviewContainer.scrollHeight;
+            const clientHeight = pdfPreviewContainer.clientHeight;
+            
+            // 当滚动到底部附近时加载更多页面
+            if (scrollTop + clientHeight >= scrollHeight - 100) {
+                const nextPage = renderedPages.size + 1;
+                if (nextPage <= pdfDoc.numPages) {
+                    const endPage = Math.min(nextPage + batchSize - 1, pdfDoc.numPages);
+                    renderPageBatch(nextPage, endPage);
+                }
+            }
+        }
+        
+        function updateImageQualityValue() {
+            const value = Math.round(imageQualitySlider.value * 100);
+            imageQualityValue.textContent = `${value}%`;
+        }
+        
+        function parsePageRange(rangeStr, totalPages) {
+            if (!rangeStr.trim()) {
+                // 返回所有页面
+                return Array.from({length: totalPages}, (_, i) => i + 1);
+            }
+            
+            const pages = new Set();
+            const parts = rangeStr.split(',');
+            
+            for (const part of parts) {
+                const trimmed = part.trim();
+                if (trimmed.includes('-')) {
+                    // 处理范围，如 "1-5"
+                    const [start, end] = trimmed.split('-').map(num => parseInt(num.trim()));
+                    if (!isNaN(start) && !isNaN(end) && start > 0 && end <= totalPages && start <= end) {
+                        for (let i = start; i <= end; i++) {
+                            pages.add(i);
+                        }
+                    }
+                } else {
+                    // 处理单个页码
+                    const pageNum = parseInt(trimmed);
+                    if (!isNaN(pageNum) && pageNum > 0 && pageNum <= totalPages) {
+                        pages.add(pageNum);
+                    }
+                }
+            }
+            
+            return Array.from(pages).sort((a, b) => a - b);
+        }
+        
+        async function convertPdfToImages() {
+            if (!pdfDoc) {
+                showPdfStatus('请先选择PDF文件', 'error');
+                return;
+            }
+            
+            // GA4 跟踪转换开始
+            trackEvent('conversion', 'pdf_to_image_start', 
+                       `pages_${pdfDoc.numPages}_format_${imageFormatSelect.value}`, 
+                       pdfDoc.numPages);
+            
+            showPdfStatus('正在转换PDF为图片，请稍候...', '');
+            convertPdfBtn.disabled = true;
+            
+            try {
+                const format = imageFormatSelect.value;
+                const quality = parseFloat(imageQualitySlider.value);
+                const pageRange = parsePageRange(pageRangeInput.value, pdfDoc.numPages);
+                
+                if (pageRange.length === 0) {
+                    showPdfStatus('请输入有效的页码范围', 'error');
+                    convertPdfBtn.disabled = false;
+                    return;
+                }
+                
+                pdfImages = [];
+                
+                for (const pageNum of pageRange) {
+                    await renderPageToImage(pageNum, format, quality);
+                }
+                
+                // 更新使用统计
+                usageStats.pdfToImage++;
+                usageStats.totalConversions++;
+                saveUsageStats();
+                
+                // GA4 跟踪转换成功
+                trackEvent('conversion', 'pdf_to_image_success', 
+                           `pages_${pageRange.length}_format_${format}`, 
+                           pageRange.length);
+                
+                showPdfStatus(`成功转换 ${pageRange.length} 页为图片`, 'success');
+                downloadAllBtn.classList.remove('hidden');
+                downloadZipBtn.classList.remove('hidden');
+                
+            } catch (error) {
+                // GA4 跟踪转换失败
+                trackEvent('conversion', 'pdf_to_image_error', error.message, 0);
+                console.error('转换PDF为图片时出错:', error);
+                showPdfStatus('转换过程中出错，请重试', 'error');
+            } finally {
+                convertPdfBtn.disabled = false;
+            }
+        }
+        
+        function renderPageToImage(pageNum, format, quality) {
+            return new Promise((resolve, reject) => {
+                pdfDoc.getPage(pageNum).then(function(page) {
+                    const viewport = page.getViewport({ scale: 2.0 }); // 使用更高的分辨率
+                    
+                    const canvas = document.createElement('canvas');
+                    const context = canvas.getContext('2d');
+                    canvas.width = viewport.width;
+                    canvas.height = viewport.height;
+                    
+                    const renderContext = {
+                        canvasContext: context,
+                        viewport: viewport
+                    };
+                    
+                    page.render(renderContext).promise.then(function() {
+                        const imgData = canvas.toDataURL(`image/${format}`, quality);
+                        
+                        pdfImages[pageNum - 1] = {
+                            data: imgData,
+                            pageNumber: pageNum,
+                            format: format
+                        };
+                        
+                        resolve();
+                    }).catch(reject);
+                }).catch(reject);
+            });
+        }
+        
+        function downloadAllImages() {
+            if (pdfImages.length === 0) {
+                showPdfStatus('没有可下载的图片', 'error');
+                return;
+            }
+            
+            // GA4 跟踪下载
+            trackEvent('download', 'all_images', `count_${pdfImages.length}`, pdfImages.length);
+            
+            pdfImages.forEach((img, index) => {
+                if (img && img.data) {
+                    const link = document.createElement('a');
+                    link.href = img.data;
+                    link.download = `page_${img.pageNumber}.${img.format || 'png'}`;
+                    link.click();
+                }
+            });
+            
+            showPdfStatus(`开始下载 ${pdfImages.filter(img => img).length} 张图片`, 'success');
+        }
+        
+        function downloadZipFile() {
+            if (pdfImages.length === 0) {
+                showPdfStatus('没有可下载的图片', 'error');
+                return;
+            }
+            
+            // GA4 跟踪下载
+            trackEvent('download', 'zip_file', `count_${pdfImages.length}`, pdfImages.length);
+            
+            showPdfStatus('正在创建压缩包，请稍候...', '');
+            
+            const zip = new JSZip();
+            let addedCount = 0;
+            
+            pdfImages.forEach((img, index) => {
+                if (img && img.data) {
+                    // 从data URL中提取base64数据
+                    const base64Data = img.data.split(',')[1];
+                    const format = img.format || 'png';
+                    zip.file(`page_${img.pageNumber}.${format}`, base64Data, {base64: true});
+                    addedCount++;
+                }
+            });
+            
+            zip.generateAsync({type: 'blob'}).then(function(content) {
+                saveAs(content, 'converted_pages.zip');
+                showPdfStatus(`压缩包创建成功，包含 ${addedCount} 张图片`, 'success');
+                
+                // GA4 跟踪压缩包下载成功
+                trackEvent('download', 'zip_success', `files_${addedCount}`, addedCount);
+            }).catch(function(error) {
+                // GA4 跟踪压缩包下载失败
+                trackEvent('download', 'zip_error', error.message, 0);
+                console.error('创建压缩包时出错:', error);
+                showPdfStatus('创建压缩包失败', 'error');
+            });
+        }
+        
+        function clearPdf() {
+            pdfFileInput.value = '';
+            pdfFileInfo.classList.add('hidden');
+            pdfPreviewContainer.innerHTML = '';
+            pdfEmptyMessage.classList.remove('hidden');
+            downloadAllBtn.classList.add('hidden');
+            downloadZipBtn.classList.add('hidden');
+            clearPdfBtn.classList.add('hidden');
+            pdfImages = [];
+            pdfDoc = null;
+            renderedPages.clear();
+            
+            showPdfStatus('PDF文件已清除', 'success');
+            
+            trackEvent('file_upload', 'pdf_cleared', 'user_action', 1);
+        }
+        
         // ========== 通用函数 ==========
         function showStatus(message, type) {
             console.log('显示状态:', message, type);
